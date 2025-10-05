@@ -1,5 +1,5 @@
 // API service layer for RealExamIELTS backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
 
 // Types based on backend schemas
 export interface User {
