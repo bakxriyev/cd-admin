@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, type Exam, type Reading, type Listening, type Writing, secureStorage, USER_TYPE_KEY } from "@/lib/api"
-import { BookOpen, Headphones, PenTool, Plus, ArrowLeft, Clock, Key, FileText, Eye, Trash2 } from "lucide-react"
+import { BookOpen, Headphones, PenTool, Plus, ArrowLeft, Clock, Key, FileText, Eye, Trash2, Edit } from "lucide-react"
 import { CreateSkillModal } from "@/components/create-skill-modal"
 import { DeleteExamModal } from "@/components/delete-exam-modal"
+import { EditExamModal } from "../../../../components/edit-exam"
 
 interface ExamWithSkills extends Exam {
   readings?: Reading[]
@@ -29,6 +30,7 @@ export default function ExamSkillsPage() {
   const [userType, setUserType] = useState<string>("")
   const [userTypeLoading, setUserTypeLoading] = useState(true)
   const [showDeleteExamModal, setShowDeleteExamModal] = useState(false)
+  const [showEditExamModal, setShowEditExamModal] = useState(false)
 
   const examId = params?.id as string
 
@@ -173,16 +175,28 @@ export default function ExamSkillsPage() {
               <p className="text-slate-400">{canEdit ? "Ko'nikmalarni boshqarish" : "Ko'nikmalarni ko'rish"}</p>
             </div>
           </div>
-          {canDelete && (
-            <Button
-              onClick={() => setShowDeleteExamModal(true)}
-              variant="outline"
-              className="border-red-600 text-red-400 hover:bg-red-700/20"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Imtihonni O'chirish
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {canEdit && (
+              <Button
+                onClick={() => setShowEditExamModal(true)}
+                variant="outline"
+                className="border-blue-600 text-blue-400 hover:bg-blue-700/20"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Tahrirlash
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                onClick={() => setShowDeleteExamModal(true)}
+                variant="outline"
+                className="border-red-600 text-red-400 hover:bg-red-700/20"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                O'chirish
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Exam Info */}
@@ -447,6 +461,15 @@ export default function ExamSkillsPage() {
           examId={examId}
           examTitle={exam?.title || ""}
           onExamDeleted={handleExamDeleted}
+        />
+      )}
+
+      {canEdit && exam && (
+        <EditExamModal
+          isOpen={showEditExamModal}
+          onClose={() => setShowEditExamModal(false)}
+          exam={exam}
+          onExamUpdated={fetchExamData}
         />
       )}
     </DashboardLayout>
