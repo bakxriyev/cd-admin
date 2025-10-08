@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, type ReadingQuestion } from "@/lib/api"
+import { api, type ReadingQuestion, type Passage } from "@/lib/api"
 import { Plus, X, HelpCircle } from "lucide-react"
 
 const QUESTION_TYPES = {
@@ -30,6 +30,7 @@ interface CreateReadingQuestionModalProps {
   readingQuestionsId: string
   onQuestionCreated: () => void
   editingQuestion?: ReadingQuestion | null
+  passages?: Passage[]
 }
 
 export function CreateReadingQuestionModal({
@@ -38,6 +39,7 @@ export function CreateReadingQuestionModal({
   readingQuestionsId,
   onQuestionCreated,
   editingQuestion,
+  passages = [],
 }: CreateReadingQuestionModalProps) {
   const [formData, setFormData] = useState({
     q_type: "MCQ_SINGLE" as ReadingQuestion["q_type"],
@@ -157,9 +159,32 @@ export function CreateReadingQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
-    } else if (
-      ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS", "MATCHING_HEADINGS"].includes(value)
-    ) {
+    } else if (value === "MATCHING_HEADINGS") {
+      const matchingPassages = passages.filter((p) => p.type === "matching")
+      if (matchingPassages.length > 0) {
+        const passageText = matchingPassages[0].reading_text
+        const inputMatches = passageText.match(/\b(\d+)\./g) || []
+        const inputCount = inputMatches.length
+
+        const initialOptions = []
+        for (let i = 0; i < inputCount; i++) {
+          initialOptions.push({
+            key: (i + 1).toString(),
+            text: "",
+          })
+        }
+        setOptions(initialOptions.length > 0 ? initialOptions : [{ key: "1", text: "" }])
+      } else {
+        setOptions([{ key: "1", text: "" }])
+      }
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+    } else if (["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(value)) {
       setOptions([{ key: "A", text: "" }])
       setCorrectAnswers([])
       setColumns([])
@@ -172,8 +197,13 @@ export function CreateReadingQuestionModal({
   }
 
   const handleAddOption = () => {
-    const nextKey = String.fromCharCode(65 + options.length) // A, B, C, D...
-    setOptions([...options, { key: nextKey, text: "" }])
+    if (formData.q_type === "MATCHING_HEADINGS") {
+      const nextKey = (options.length + 1).toString()
+      setOptions([...options, { key: nextKey, text: "" }])
+    } else {
+      const nextKey = String.fromCharCode(65 + options.length) // A, B, C, D...
+      setOptions([...options, { key: nextKey, text: "" }])
+    }
   }
 
   const handleRemoveOption = (index: number) => {
@@ -181,7 +211,7 @@ export function CreateReadingQuestionModal({
       const newOptions = options.filter((_, i) => i !== index)
       const reassignedOptions = newOptions.map((option, i) => ({
         ...option,
-        key: String.fromCharCode(65 + i),
+        key: formData.q_type === "MATCHING_HEADINGS" ? (i + 1).toString() : String.fromCharCode(65 + i),
       }))
       setOptions(reassignedOptions)
 
@@ -503,6 +533,18 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
+          {formData.q_type === "MATCHING_HEADINGS" && passages.filter((p) => p.type === "matching").length > 0 && (
+            <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 space-y-2">
+              <p className="text-blue-400 text-sm font-semibold">Matching Headings uchun muhim ma'lumot:</p>
+              <ul className="text-blue-300 text-xs space-y-1 list-disc list-inside">
+                <li>Optionlar passagedagi tartib sonlariga bog'langan (1, 2, 3...)</li>
+                <li>To'g'ri javob - bu option raqamining o'zi (masalan: "1", "2", "3")</li>
+                <li>Agar passage input 1 uchun option 1 to'g'ri bo'lsa, javob "1" bo'ladi</li>
+                <li>Agar passage input 2 uchun option 3 to'g'ri bo'lsa, javob "3" bo'ladi</li>
+              </ul>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="q_type" className="text-slate-300 text-sm">
               Savol Turi *
@@ -557,7 +599,14 @@ export function CreateReadingQuestionModal({
           {needsOptions && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-slate-300 text-sm">Javob Variantlari *</Label>
+                <Label className="text-slate-300 text-sm">
+                  Javob Variantlari *
+                  {formData.q_type === "MATCHING_HEADINGS" && (
+                    <span className="text-xs text-blue-400 ml-2">
+                      (Raqamlar: 1, 2, 3... - to'g'ri javob sifatida saqlanadi)
+                    </span>
+                  )}
+                </Label>
                 <Button
                   type="button"
                   onClick={handleAddOption}
@@ -574,12 +623,22 @@ export function CreateReadingQuestionModal({
                 {options.map((option, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-slate-300 font-mono text-sm w-4">{option.key}:</span>
+                      <span
+                        className={`font-mono text-sm w-6 ${
+                          formData.q_type === "MATCHING_HEADINGS" ? "text-blue-400 font-bold" : "text-slate-300"
+                        }`}
+                      >
+                        {option.key}:
+                      </span>
                       <Input
                         value={option.text}
                         onChange={(e) => handleOptionChange(index, e.target.value)}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Option ${option.key}`}
+                        placeholder={
+                          formData.q_type === "MATCHING_HEADINGS"
+                            ? `Heading ${option.key} (to'g'ri javob: ${option.key})`
+                            : `Option ${option.key}`
+                        }
                         required
                       />
                       <Button
@@ -589,11 +648,17 @@ export function CreateReadingQuestionModal({
                         size="sm"
                         className={
                           correctAnswers.includes(option.key)
-                            ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7"
-                            : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7"
+                            ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7 min-w-[60px]"
+                            : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7 min-w-[60px]"
                         }
                       >
-                        {correctAnswers.includes(option.key) ? "To'g'ri" : "Belgilash"}
+                        {correctAnswers.includes(option.key)
+                          ? formData.q_type === "MATCHING_HEADINGS"
+                            ? `✓ ${option.key}`
+                            : "To'g'ri"
+                          : formData.q_type === "MATCHING_HEADINGS"
+                            ? option.key
+                            : "Belgilash"}
                       </Button>
                     </div>
                     {options.length > 1 && (
@@ -610,6 +675,15 @@ export function CreateReadingQuestionModal({
                   </div>
                 ))}
               </div>
+
+              {formData.q_type === "MATCHING_HEADINGS" && correctAnswers.length > 0 && (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-2 mt-2">
+                  <p className="text-green-400 text-xs">
+                    <span className="font-semibold">To'g'ri javoblar:</span> {correctAnswers.join(", ")}
+                  </p>
+                  <p className="text-green-300 text-xs mt-1">Bu raqamlar to'g'ri javob sifatida saqlanadi</p>
+                </div>
+              )}
             </div>
           )}
 

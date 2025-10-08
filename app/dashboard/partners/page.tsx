@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ClientModal } from "../../../components/client-modal"
+import { ClientModal } from "@/components/client-modal"
 import { Search, Filter, Plus, Eye, Edit, Trash2, UserCheck, DollarSign, Users, Download, EyeOff } from "lucide-react"
 import { api, type Client } from "@/lib/api"
 import { toast } from "sonner"
@@ -178,7 +178,7 @@ export default function PartnersPage() {
 
       ctx.fillStyle = "#e2e8f0"
       ctx.font = "bold 24px Arial"
-      ctx.fillText(client.password, 280, 470)
+      ctx.fillText(client.password || "N/A", 280, 470)
 
       // Footer
       ctx.fillStyle = "#64748b"
@@ -375,6 +375,7 @@ export default function PartnersPage() {
                             variant="ghost"
                             className="text-slate-400 hover:text-white"
                             onClick={() => handleViewClient(client)}
+                            title="Ma'lumotlarni ko'rish"
                           >
                             <Eye className="w-4 h-4" />
                           </Button>

@@ -1,5 +1,5 @@
 // API service layer for RealExamIELTS backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
 
 // Types based on backend schemas
 export interface User {
@@ -432,11 +432,14 @@ export const api = {
         headers: isFormData ? {} : { "Content-Type": "application/json" },
       })
     },
-    update: (id: string, writingData: any) =>
-      apiRequest(`/writing/${id}`, {
+    update: (id: string, writingData: FormData | any) => {
+      const isFormData = writingData instanceof FormData
+      return apiRequest(`/writing/${id}`, {
         method: "PUT",
-        body: JSON.stringify(writingData),
-      }),
+        body: isFormData ? writingData : JSON.stringify(writingData),
+        headers: isFormData ? {} : { "Content-Type": "application/json" },
+      })
+    },
     delete: (id: string) =>
       apiRequest(`/writing/${id}`, {
         method: "DELETE",

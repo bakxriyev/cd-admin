@@ -6,9 +6,10 @@ import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api, type Exam, type Reading, type Listening, type Writing } from "@/lib/api"
+import { api, type Exam, type Reading, type Listening, type Writing, secureStorage, USER_TYPE_KEY } from "@/lib/api"
 import { BookOpen, Headphones, PenTool, Plus, ArrowLeft, Clock, Key, FileText, Eye, Trash2 } from "lucide-react"
 import { CreateSkillModal } from "@/components/create-skill-modal"
+import { DeleteExamModal } from "@/components/delete-exam-modal"
 
 interface ExamWithSkills extends Exam {
   readings?: Reading[]
@@ -25,21 +26,47 @@ export default function ExamSkillsPage() {
   const [activeSkillModal, setActiveSkillModal] = useState<"reading" | "listening" | "writing" | null>(null)
   const [selectedWritingPart, setSelectedWritingPart] = useState<"PART1" | "PART2" | null>(null)
   const [deletingSkill, setDeletingSkill] = useState<{ type: string; id: number } | null>(null)
+  const [userType, setUserType] = useState<string>("")
+  const [userTypeLoading, setUserTypeLoading] = useState(true)
+  const [showDeleteExamModal, setShowDeleteExamModal] = useState(false)
 
-  const examId = params.id as string
+  const examId = params?.id as string
 
   useEffect(() => {
-    fetchExamData()
+    console.log("[v0] Loading user type from storage...")
+    const type = secureStorage.getItem(USER_TYPE_KEY)
+    console.log("[v0] User type loaded:", type)
+    setUserType(type || "")
+    setUserTypeLoading(false)
+
+    if (examId && examId !== "undefined") {
+      console.log("[v0] Fetching exam with ID:", examId)
+      fetchExamData()
+    } else {
+      console.error("[v0] Invalid exam ID:", examId)
+      setError("Noto'g'ri imtihon ID")
+      setLoading(false)
+    }
   }, [examId])
 
   const fetchExamData = async () => {
+    if (!examId || examId === "undefined") {
+      console.error("[v0] Cannot fetch exam: Invalid ID")
+      setError("Noto'g'ri imtihon ID")
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
+      console.log("[v0] Making API call to fetch exam:", examId)
       const examData = await api.exams.getById(examId)
+      console.log("[v0] Exam data received:", examData)
       setExam(examData)
+      setError("")
     } catch (error: any) {
-      console.error("Failed to fetch exam:", error)
-      setError("Imtihon ma'lumotlarini yuklashda xatolik yuz berdi")
+      console.error("[v0] Failed to fetch exam:", error)
+      setError(error.message || "Imtihon ma'lumotlarini yuklashda xatolik yuz berdi")
     } finally {
       setLoading(false)
     }
@@ -74,14 +101,22 @@ export default function ExamSkillsPage() {
       }
       fetchExamData()
     } catch (error) {
-      console.error("Failed to delete skill:", error)
+      console.error("[v0] Failed to delete skill:", error)
       alert("O'chirishda xatolik yuz berdi")
     } finally {
       setDeletingSkill(null)
     }
   }
 
-  if (loading) {
+  const handleExamDeleted = () => {
+    router.push("/dashboard/exams")
+  }
+
+  const canEdit = !userTypeLoading && userType !== "client"
+  const canDelete = !userTypeLoading && (userType === "superadmin" || userType === "admin")
+  console.log("[v0] Can edit:", canEdit, "Can delete:", canDelete, "User type:", userType, "Loading:", userTypeLoading)
+
+  if (loading || userTypeLoading) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
@@ -117,27 +152,37 @@ export default function ExamSkillsPage() {
 
   const hasWritingPart1 = existingWritings.some((w) => w.part === "PART1")
   const hasWritingPart2 = existingWritings.some((w) => w.part === "PART2")
-  const hasReading = existingReadings.length > 0
-  const hasListening = existingListenings.length > 0
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={() => router.push("/dashboard/exams")}
-            variant="outline"
-            size="sm"
-            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Orqaga
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-white text-balance">{exam.title}</h1>
-            <p className="text-slate-400">Ko'nikmalarni boshqarish</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={() => router.push("/dashboard/exams")}
+              variant="outline"
+              size="sm"
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Orqaga
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-white text-balance">{exam.title}</h1>
+              <p className="text-slate-400">{canEdit ? "Ko'nikmalarni boshqarish" : "Ko'nikmalarni ko'rish"}</p>
+            </div>
           </div>
+          {canDelete && (
+            <Button
+              onClick={() => setShowDeleteExamModal(true)}
+              variant="outline"
+              className="border-red-600 text-red-400 hover:bg-red-700/20"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Imtihonni O'chirish
+            </Button>
+          )}
         </div>
 
         {/* Exam Info */}
@@ -207,29 +252,36 @@ export default function ExamSkillsPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               <span className="truncate">{reading.passage_title || reading.title}</span>
                             </Button>
-                            <div className="flex gap-2">
+                            {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("reading", reading.id)}
                                 disabled={deletingSkill?.type === "reading" && deletingSkill?.id === reading.id}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2"
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xs py-2"
                                 size="sm"
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />
                                 O'chirish
                               </Button>
-                            </div>
+                            )}
                           </div>
                         ))}
                       </>
                     ) : (
-                      <Button
-                        onClick={() => setActiveSkillModal("reading")}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors font-medium"
-                        size="sm"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Yaratish
-                      </Button>
+                      <>
+                        {canEdit && (
+                          <Button
+                            onClick={() => setActiveSkillModal("reading")}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition-colors font-medium"
+                            size="sm"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Yaratish
+                          </Button>
+                        )}
+                        {!canEdit && (
+                          <p className="text-slate-400 text-center text-sm italic">Reading bo'limi mavjud emas</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -259,29 +311,36 @@ export default function ExamSkillsPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               <span className="truncate">{listening.title}</span>
                             </Button>
-                            <div className="flex gap-2">
+                            {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("listening", listening.id)}
                                 disabled={deletingSkill?.type === "listening" && deletingSkill?.id === listening.id}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2"
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xs py-2"
                                 size="sm"
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />
                                 O'chirish
                               </Button>
-                            </div>
+                            )}
                           </div>
                         ))}
                       </>
                     ) : (
-                      <Button
-                        onClick={() => setActiveSkillModal("listening")}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg transition-colors font-medium"
-                        size="sm"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Yaratish
-                      </Button>
+                      <>
+                        {canEdit && (
+                          <Button
+                            onClick={() => setActiveSkillModal("listening")}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg transition-colors font-medium"
+                            size="sm"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Yaratish
+                          </Button>
+                        )}
+                        {!canEdit && (
+                          <p className="text-slate-400 text-center text-sm italic">Listening bo'limi mavjud emas</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </CardContent>
@@ -311,44 +370,53 @@ export default function ExamSkillsPage() {
                               <Eye className="w-4 h-4 mr-2" />
                               <span className="truncate">{writing.part}</span>
                             </Button>
-                            <div className="flex gap-2">
+                            {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("writing", writing.id)}
                                 disabled={deletingSkill?.type === "writing" && deletingSkill?.id === writing.id}
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-xs py-2"
+                                className="w-full bg-red-600 hover:bg-red-700 text-white text-xs py-2"
                                 size="sm"
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />
                                 O'chirish
                               </Button>
-                            </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {!hasWritingPart1 && (
-                      <Button
-                        onClick={() => handleWritingPartSelect("PART1")}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg transition-colors font-medium"
-                        size="sm"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        PART 1 Yaratish
-                      </Button>
+                    {canEdit && (
+                      <>
+                        {!hasWritingPart1 && (
+                          <Button
+                            onClick={() => handleWritingPartSelect("PART1")}
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg transition-colors font-medium"
+                            size="sm"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            PART 1 Yaratish
+                          </Button>
+                        )}
+                        {!hasWritingPart2 && (
+                          <Button
+                            onClick={() => handleWritingPartSelect("PART2")}
+                            className="w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg transition-colors font-medium"
+                            size="sm"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            PART 2 Yaratish
+                          </Button>
+                        )}
+                        {hasWritingPart1 && hasWritingPart2 && existingWritings.length === 0 && (
+                          <p className="text-slate-400 text-center text-xs italic">
+                            Barcha writing qismlari qo'shilgan
+                          </p>
+                        )}
+                      </>
                     )}
-                    {!hasWritingPart2 && (
-                      <Button
-                        onClick={() => handleWritingPartSelect("PART2")}
-                        className="w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg transition-colors font-medium"
-                        size="sm"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        PART 2 Yaratish
-                      </Button>
-                    )}
-                    {hasWritingPart1 && hasWritingPart2 && existingWritings.length === 0 && (
-                      <p className="text-slate-400 text-center text-xs italic">Barcha writing qismlari qo'shilgan</p>
+                    {!canEdit && existingWritings.length === 0 && (
+                      <p className="text-slate-400 text-center text-sm italic">Writing bo'limi mavjud emas</p>
                     )}
                   </div>
                 </CardContent>
@@ -358,18 +426,29 @@ export default function ExamSkillsPage() {
         </Card>
       </div>
 
-      {/* Skill Creation Modal */}
-      <CreateSkillModal
-        isOpen={activeSkillModal !== null}
-        onClose={() => {
-          setActiveSkillModal(null)
-          setSelectedWritingPart(null)
-        }}
-        skillType={activeSkillModal}
-        examId={examId}
-        onSkillCreated={handleSkillCreated}
-        writingPart={selectedWritingPart}
-      />
+      {canEdit && (
+        <CreateSkillModal
+          isOpen={activeSkillModal !== null}
+          onClose={() => {
+            setActiveSkillModal(null)
+            setSelectedWritingPart(null)
+          }}
+          skillType={activeSkillModal}
+          examId={examId}
+          onSkillCreated={handleSkillCreated}
+          writingPart={selectedWritingPart}
+        />
+      )}
+
+      {canDelete && (
+        <DeleteExamModal
+          isOpen={showDeleteExamModal}
+          onClose={() => setShowDeleteExamModal(false)}
+          examId={examId}
+          examTitle={exam?.title || ""}
+          onExamDeleted={handleExamDeleted}
+        />
+      )}
     </DashboardLayout>
   )
 }

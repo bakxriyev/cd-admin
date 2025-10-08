@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api, type Writing } from "@/lib/api"
-import { PenTool, ArrowLeft, Clock, FileText, ImageIcon } from "lucide-react"
+import { api, type Writing, secureStorage, USER_TYPE_KEY } from "@/lib/api"
+import { PenTool, ArrowLeft, Clock, FileText, ImageIcon, Edit, Trash2 } from "lucide-react"
+import { EditWritingModal } from "@/components/edit-writing-modal"
 
 export default function WritingDetailPage() {
   const params = useParams()
@@ -16,11 +17,15 @@ export default function WritingDetailPage() {
   const [writing, setWriting] = useState<Writing | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [userType, setUserType] = useState<string>("")
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const examId = params.id as string
   const writingId = params.writingId as string
 
   useEffect(() => {
+    const type = secureStorage.getItem(USER_TYPE_KEY)
+    setUserType(type || "")
     fetchWriting()
   }, [writingId])
 
@@ -36,6 +41,25 @@ export default function WritingDetailPage() {
       setLoading(false)
     }
   }
+
+  const handleDelete = async () => {
+    if (!confirm("Bu writing bo'limini o'chirishni xohlaysizmi?")) return
+
+    try {
+      await api.writing.delete(writingId)
+      router.back()
+    } catch (error) {
+      console.error("Failed to delete writing:", error)
+      alert("O'chirishda xatolik yuz berdi")
+    }
+  }
+
+  const handleEditSuccess = () => {
+    setShowEditModal(false)
+    fetchWriting()
+  }
+
+  const canEdit = userType === "superadmin" || userType === "admin"
 
   if (loading) {
     return (
@@ -72,23 +96,46 @@ export default function WritingDetailPage() {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={() => router.back()}
-            variant="outline"
-            size="sm"
-            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Orqaga
-          </Button>
-          <div className="flex items-center gap-3">
-            <PenTool className="w-8 h-8 text-purple-400" />
-            <div>
-              <h1 className="text-2xl font-bold text-white text-balance">{writing.part}</h1>
-              <p className="text-slate-400">Writing Bo'limi</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={() => router.back()}
+              variant="outline"
+              size="sm"
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Orqaga
+            </Button>
+            <div className="flex items-center gap-3">
+              <PenTool className="w-8 h-8 text-purple-400" />
+              <div>
+                <h1 className="text-2xl font-bold text-white text-balance">{writing.part}</h1>
+                <p className="text-slate-400">Writing Bo'limi</p>
+              </div>
             </div>
           </div>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setShowEditModal(true)}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Tahrirlash
+              </Button>
+              <Button
+                onClick={handleDelete}
+                size="sm"
+                variant="outline"
+                className="border-red-600 text-red-400 hover:bg-red-700/20 bg-transparent"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                O'chirish
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Writing Info */}
@@ -144,15 +191,22 @@ export default function WritingDetailPage() {
                 <img
                   src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/writing/${writing.task_image}`}
                   alt="Writing task image"
-                  className=" rounded-lg border border-slate-600"
-                  width={500}
-                  height={950}
+                  className="max-w-full h-auto rounded-lg border border-slate-600"
                 />
               </div>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {canEdit && (
+        <EditWritingModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          writing={writing}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </DashboardLayout>
   )
 }

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -53,6 +53,21 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
   const [logoPreview, setLogoPreview] = useState<string | null>(client?.logo || null)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    if (client) {
+      setFormData({
+        full_name: client.full_name || "",
+        email: client.email || "",
+        password: "",
+        phone_number: client.phone_number || "",
+        balance: client.balance || 0,
+        location: client.location || "",
+        mock_price: client.mock_price || 0,
+      })
+      setLogoPreview(client.logo || null)
+    }
+  }, [client, mode])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -168,7 +183,7 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -179,15 +194,23 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isViewMode && (
+            <div className="space-y-2">
+              <Label>ID</Label>
+              <Input value={client?.id || ""} disabled className="bg-slate-100" />
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="full_name">To'liq Ism</Label>
             <Input
               id="full_name"
               name="full_name"
-              value={formData.full_name}
+              value={isViewMode ? client?.full_name || "" : formData.full_name}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
@@ -197,10 +220,11 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
               id="email"
               name="email"
               type="email"
-              value={formData.email}
+              value={isViewMode ? client?.email || "" : formData.email}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
@@ -211,15 +235,15 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  value={client?.password || ""}
+                  value={client?.password || "••••••••"}
                   disabled
-                  className="font-mono"
+                  className="font-mono bg-slate-100"
                 />
                 <Button
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="text-slate-400 hover:text-white"
+                  className="text-slate-400 hover:text-white shrink-0"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -242,7 +266,7 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="text-slate-400 hover:text-white"
+                  className="text-slate-400 hover:text-white shrink-0"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -256,10 +280,11 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
             <Input
               id="phone_number"
               name="phone_number"
-              value={formData.phone_number}
+              value={isViewMode ? client?.phone_number || "" : formData.phone_number}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
@@ -268,10 +293,11 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
             <Input
               id="location"
               name="location"
-              value={formData.location}
+              value={isViewMode ? client?.location || "" : formData.location}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
@@ -283,10 +309,11 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
               type="number"
               min="0"
               step="0.01"
-              value={formData.balance}
+              value={isViewMode ? client?.balance || 0 : formData.balance}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
@@ -298,14 +325,28 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
               type="number"
               min="0"
               step="0.01"
-              value={formData.mock_price}
+              value={isViewMode ? client?.mock_price || 0 : formData.mock_price}
               onChange={handleInputChange}
               disabled={isViewMode}
-              required
+              required={!isViewMode}
+              className={isViewMode ? "bg-slate-100" : ""}
             />
           </div>
 
-          {!isViewMode && (
+          {isViewMode ? (
+            client?.logo && (
+              <div className="space-y-2">
+                <Label>Logo</Label>
+                <div className="flex justify-center">
+                  <img
+                    src={client.logo || "/placeholder.svg"}
+                    alt="Client logo"
+                    className="w-32 h-32 object-cover rounded-lg border-2 border-slate-200"
+                  />
+                </div>
+              </div>
+            )
+          ) : (
             <div className="space-y-2">
               <Label>Logo</Label>
               <div className="flex items-center gap-4">
@@ -339,27 +380,33 @@ export function ClientModal({ isOpen, onClose, onSuccess, client, mode }: Client
             </div>
           )}
 
-          {isViewMode && client?.logo && (
+          {isViewMode && (
             <div className="space-y-2">
-              <Label>Logo</Label>
-              <img
-                src={client.logo || "/placeholder.svg"}
-                alt="Client logo"
-                className="w-20 h-20 object-cover rounded-lg border"
+              <Label>Ro'yxatdan O'tgan Sana</Label>
+              <Input
+                value={client?.created_at ? new Date(client.created_at).toLocaleString("uz-UZ") : ""}
+                disabled
+                className="bg-slate-100"
               />
             </div>
           )}
 
-          {!isViewMode && (
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Bekor qilish
+          <DialogFooter>
+            {isViewMode ? (
+              <Button type="button" onClick={onClose} className="w-full">
+                Yopish
               </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "Saqlanmoqda..." : mode === "create" ? "Yaratish" : "Saqlash"}
-              </Button>
-            </DialogFooter>
-          )}
+            ) : (
+              <>
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Bekor qilish
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? "Saqlanmoqda..." : mode === "create" ? "Yaratish" : "Saqlash"}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

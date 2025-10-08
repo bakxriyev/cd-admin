@@ -14,11 +14,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Edit, Eye, Loader2, Upload, Zap } from "lucide-react"
 import { api, type User, type Admin, type Client, secureStorage, USER_DATA_KEY } from "@/lib/api"
 import { toast } from "sonner"
-import { InsufficientBalanceModal } from "./balance-modal"
+import { InsufficientBalanceModal } from "../components/balance-modal"
 
 interface UserModalProps {
   mode: "create" | "edit" | "view"
@@ -30,7 +29,6 @@ interface UserModalProps {
 export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [userType, setUserType] = useState<"user" | "admin" | "client">("user")
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [quickCreateUserId, setQuickCreateUserId] = useState<string>("")
@@ -104,7 +102,6 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
           phone_number: user.phone_number,
           balance: "balance" in user ? user.balance : 0,
         })
-        setUserType("balance" in user ? "client" : "admin")
       } else {
         setFormData({
           name: user.name,
@@ -115,7 +112,6 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
           phone_number: "",
           balance: 0,
         })
-        setUserType("user")
       }
     } else {
       setFormData({
@@ -127,7 +123,6 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
         phone_number: "",
         balance: 0,
       })
-      setUserType("user")
     }
   }, [user, mode, open])
 
@@ -159,7 +154,7 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
     e.preventDefault()
     if (mode === "view") return
 
-    if (mode === "create" && userType === "user") {
+    if (mode === "create") {
       await fetchFreshClientData()
 
       if (!canCreateUser()) {
@@ -180,65 +175,43 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
       }
 
       if (mode === "create") {
-        if (userType === "admin") {
-          await api.admins.create({
-            full_name: formData.full_name,
-            email: formData.email,
-            password: formData.password,
-            phone_number: formData.phone_number,
-          })
-          toast.success("Admin muvaffaqiyatli yaratildi")
-        } else if (userType === "client") {
-          const clientFormData = new FormData()
-          clientFormData.append("full_name", formData.full_name)
-          clientFormData.append("email", formData.email)
-          clientFormData.append("password", formData.password)
-          clientFormData.append("phone_number", formData.phone_number)
-          clientFormData.append("balance", formData.balance.toString())
-          if (logoFile) {
-            clientFormData.append("logo", logoFile)
+        if (currentUser?.type === "client") {
+          const currentBalance = currentUser.balance || 0
+          const mockPrice = currentUser.mock_price || 0
+
+          if (currentBalance < mockPrice) {
+            setLoading(false)
+            setOpen(false)
+            setInsufficientBalanceOpen(true)
+            return
           }
-          await api.clients.create(clientFormData)
-          toast.success("Mijoz muvaffaqiyatli yaratildi")
+        }
+
+        const userData = {
+          name: formData.name,
+          email: formData.email,
+          username: formData.username,
+          password: formData.password,
+          location: location,
+        }
+
+        await api.users.create(userData)
+
+        if (currentUser?.type === "client" && currentUser?.mock_price) {
+          const newBalance = currentUser.balance - currentUser.mock_price
+          const updateData = new FormData()
+          updateData.append("balance", newBalance.toString())
+
+          await api.clients.update(currentUser.id, updateData)
+
+          currentUser.balance = newBalance
+          secureStorage.setItem(USER_DATA_KEY, JSON.stringify(currentUser))
+
+          window.dispatchEvent(new Event("balanceUpdated"))
+
+          toast.success(`User yaratildi. Yangi balans: $${newBalance.toFixed(2)}`)
         } else {
-          if (currentUser?.type === "client") {
-            const currentBalance = currentUser.balance || 0
-            const mockPrice = currentUser.mock_price || 0
-
-            if (currentBalance < mockPrice) {
-              setLoading(false)
-              setOpen(false)
-              setInsufficientBalanceOpen(true)
-              return
-            }
-          }
-
-          const userData = {
-            name: formData.name,
-            email: formData.email,
-            username: formData.username,
-            password: formData.password,
-            location: location,
-          }
-
-          await api.users.create(userData)
-
-          if (currentUser?.type === "client" && currentUser?.mock_price) {
-            const newBalance = currentUser.balance - currentUser.mock_price
-            const updateData = new FormData()
-            updateData.append("balance", newBalance.toString())
-
-            await api.clients.update(currentUser.id, updateData)
-
-            currentUser.balance = newBalance
-            secureStorage.setItem(USER_DATA_KEY, JSON.stringify(currentUser))
-
-            window.dispatchEvent(new Event("balanceUpdated"))
-
-            toast.success(`User yaratildi. Yangi balans: $${newBalance.toFixed(2)}`)
-          } else {
-            toast.success("User muvaffaqiyatli yaratildi")
-          }
+          toast.success("User muvaffaqiyatli yaratildi")
         }
       } else if (mode === "edit" && user) {
         if ("full_name" in user) {
@@ -387,6 +360,8 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
     </div>
   )
 
+  const isAdminOrClient = user && "full_name" in user
+
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -398,31 +373,7 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "create" && (
-              <div className="space-y-2">
-                <Label htmlFor="userType" className="text-slate-300">
-                  Foydalanuvchi Turi
-                </Label>
-                <Select value={userType} onValueChange={(value: "user" | "admin" | "client") => setUserType(value)}>
-                  <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="user" className="text-white hover:bg-slate-700">
-                      Oddiy Foydalanuvchi
-                    </SelectItem>
-                    <SelectItem value="admin" className="text-white hover:bg-slate-700">
-                      Admin
-                    </SelectItem>
-                    <SelectItem value="client" className="text-white hover:bg-slate-700">
-                      Mijoz
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {userType === "user" ? (
+            {!isAdminOrClient ? (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-slate-300">
@@ -482,7 +433,7 @@ export function UserModal({ mode, user, trigger, onSuccess }: UserModalProps) {
                   />
                 </div>
 
-                {userType === "client" && (
+                {user && "balance" in user && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="balance" className="text-slate-300">

@@ -237,6 +237,7 @@ export default function ExamsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-slate-700">
+                    <TableHead className="text-slate-300">ID</TableHead>
                     <TableHead className="text-slate-300">Nomi</TableHead>
                     <TableHead className="text-slate-300">Turi</TableHead>
                     <TableHead className="text-slate-300">Tavsif</TableHead>
@@ -252,6 +253,7 @@ export default function ExamsPage() {
                       className="border-slate-700 hover:bg-slate-700/30 cursor-pointer"
                       onClick={() => handleExamClick(exam)}
                     >
+                      <TableCell className="text-slate-300 font-mono text-sm">{exam.id}</TableCell>
                       <TableCell className="text-white font-medium">{exam.title}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="border-slate-600 text-slate-300">
