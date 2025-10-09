@@ -150,9 +150,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
               <Bell className="w-5 h-5" />
             </Button>
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
-              <Settings className="w-5 h-5" />
-            </Button>
+            <Link href="/dashboard/profile">
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+                <Settings className="w-5 h-5" />
+              </Button>
+            </Link>
             <div className="text-sm text-slate-300">
               {userName} ({userType === "admin" ? userRole : "mijoz"})
             </div>

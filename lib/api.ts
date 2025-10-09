@@ -701,6 +701,30 @@ export const api = {
         body: JSON.stringify(speakingData),
       }),
   },
+
+  // OTP endpoints for password reset
+  otp: {
+    sendAdminOtp: (email: string) =>
+      apiRequest("/auth/admin/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    verifyAdminOtp: (email: string, code: string, newPassword: string) =>
+      apiRequest("/auth/admin/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ email, code, newPassword }),
+      }),
+    sendClientOtp: (email: string) =>
+      apiRequest("/auth/client/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }),
+    verifyClientOtp: (email: string, code: string, newPassword: string) =>
+      apiRequest("/auth/client/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ email, code, newPassword }),
+      }),
+  },
 }
 
 // Export secure storage for use in components
