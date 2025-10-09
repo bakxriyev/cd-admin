@@ -190,8 +190,8 @@ export default function ListeningDetailPage() {
     const audioFile = listening.audio_file || listening.audio_url || listening.audioFile || listening.audioUrl
     if (!audioFile) return ""
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://backend.realexamielts.uz"
-    const audioUrl = `${baseUrl}/uploads/listening/${audioFile}`
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL
+    const audioUrl = `${baseUrl}${audioFile}`
 
     console.log("[v0] Constructed audio URL:", audioUrl)
     return audioUrl
