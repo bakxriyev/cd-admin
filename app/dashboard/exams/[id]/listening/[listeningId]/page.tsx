@@ -29,6 +29,7 @@ export default function ListeningDetailPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<string>("")
   const [editingSection, setEditingSection] = useState<ListeningQuestions | null>(null)
   const [editingQuestion, setEditingQuestion] = useState<ListeningQuestion | null>(null)
+  const [copyingQuestion, setCopyingQuestion] = useState<ListeningQuestion | null>(null)
   const [audioError, setAudioError] = useState<string>("")
   const [audioLoaded, setAudioLoaded] = useState(false)
 
@@ -106,6 +107,7 @@ export default function ListeningDetailPage() {
   const handleQuestionCreated = () => {
     setShowQuestionModal(false)
     setEditingQuestion(null)
+    setCopyingQuestion(null)
     setSelectedSectionId("")
     fetchListeningData()
   }
@@ -122,6 +124,14 @@ export default function ListeningDetailPage() {
 
   const handleEditQuestion = (question: ListeningQuestion) => {
     setEditingQuestion(question)
+    setCopyingQuestion(null)
+    setSelectedSectionId(question.listening_questions_id.toString())
+    setShowQuestionModal(true)
+  }
+
+  const handleCopyQuestion = (question: ListeningQuestion) => {
+    setCopyingQuestion(question)
+    setEditingQuestion(null)
     setSelectedSectionId(question.listening_questions_id.toString())
     setShowQuestionModal(true)
   }
@@ -180,8 +190,8 @@ export default function ListeningDetailPage() {
     const audioFile = listening.audio_file || listening.audio_url || listening.audioFile || listening.audioUrl
     if (!audioFile) return ""
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-    const audioUrl = `${baseUrl}${audioFile}`
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://backend.realexamielts.uz"
+    const audioUrl = `${baseUrl}/uploads/listening/${audioFile}`
 
     console.log("[v0] Constructed audio URL:", audioUrl)
     return audioUrl
@@ -455,6 +465,15 @@ export default function ListeningDetailPage() {
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <Button
+                                      onClick={() => handleCopyQuestion(question)}
+                                      size="sm"
+                                      variant="outline"
+                                      className="border-blue-600 text-blue-400 hover:bg-blue-700/20 text-xs px-1 py-0 h-6"
+                                      title="Savolni nusxalash"
+                                    >
+                                      Copy
+                                    </Button>
+                                    <Button
                                       onClick={() => handleEditQuestion(question)}
                                       size="sm"
                                       variant="outline"
@@ -505,11 +524,13 @@ export default function ListeningDetailPage() {
         onClose={() => {
           setShowQuestionModal(false)
           setEditingQuestion(null)
+          setCopyingQuestion(null)
           setSelectedSectionId("")
         }}
         listeningQuestionsId={selectedSectionId}
         onQuestionCreated={handleQuestionCreated}
         editingQuestion={editingQuestion}
+        copyingQuestion={copyingQuestion}
       />
 
       {showAudioUpdateModal && (

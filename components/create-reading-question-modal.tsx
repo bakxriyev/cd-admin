@@ -30,6 +30,7 @@ interface CreateReadingQuestionModalProps {
   readingQuestionsId: string
   onQuestionCreated: () => void
   editingQuestion?: ReadingQuestion | null
+  copyingQuestion?: ReadingQuestion | null
   passages?: Passage[]
 }
 
@@ -39,6 +40,7 @@ export function CreateReadingQuestionModal({
   readingQuestionsId,
   onQuestionCreated,
   editingQuestion,
+  copyingQuestion,
   passages = [],
 }: CreateReadingQuestionModalProps) {
   const [formData, setFormData] = useState({
@@ -54,57 +56,79 @@ export function CreateReadingQuestionModal({
   const [matchingChoices, setMatchingChoices] = useState<Record<string, string>>({ A: "" })
   const [matchingRows, setMatchingRows] = useState<string[]>([""])
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({})
+  const [matchingHeadingsOptions, setMatchingHeadingsOptions] = useState<Array<{ key: string; text: string }>>([
+    { key: "A", text: "" },
+  ])
+  const [matchingHeadingsInputCount, setMatchingHeadingsInputCount] = useState(1)
+  const [matchingHeadingsAnswers, setMatchingHeadingsAnswers] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (editingQuestion) {
+    const questionToLoad = editingQuestion || copyingQuestion
+
+    if (questionToLoad) {
       setFormData({
-        q_type: editingQuestion.q_type,
-        q_text: editingQuestion.q_text || "",
-        photo: editingQuestion.photo || "",
+        q_type: questionToLoad.q_type,
+        q_text: questionToLoad.q_text || "",
+        photo: questionToLoad.photo || "",
       })
 
-      if (editingQuestion.q_type === "MATCHING_INFORMATION") {
-        if (editingQuestion.choices && typeof editingQuestion.choices === "object") {
-          setMatchingChoices(editingQuestion.choices)
+      if (questionToLoad.q_type === "MATCHING_INFORMATION") {
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setMatchingChoices(questionToLoad.choices)
         }
-        if (editingQuestion.rows && Array.isArray(editingQuestion.rows)) {
-          setMatchingRows(editingQuestion.rows)
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setMatchingRows(questionToLoad.rows)
         }
-        if (editingQuestion.answers && typeof editingQuestion.answers === "object") {
-          setMatchingAnswers(editingQuestion.answers)
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setMatchingAnswers(questionToLoad.answers)
         }
-      } else if (editingQuestion.q_type === "TABLE_COMPLETION") {
-        setColumns(editingQuestion.columns || [""])
-        if (editingQuestion.rows && Array.isArray(editingQuestion.rows)) {
+      } else if (questionToLoad.q_type === "MATCHING_HEADINGS") {
+        if (questionToLoad.options) {
+          if (Array.isArray(questionToLoad.options)) {
+            setMatchingHeadingsOptions(questionToLoad.options)
+          } else if (typeof questionToLoad.options === "object") {
+            const optionsArray = Object.entries(questionToLoad.options).map(([key, text], index) => ({
+              key: String.fromCharCode(65 + index),
+              text: text as string,
+            }))
+            setMatchingHeadingsOptions(optionsArray)
+          }
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setMatchingHeadingsAnswers(questionToLoad.answers)
+          const inputCount = Object.keys(questionToLoad.answers).length
+          setMatchingHeadingsInputCount(inputCount > 0 ? inputCount : 1)
+        }
+      } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
+        setColumns(questionToLoad.columns || [""])
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
           if (
-            editingQuestion.rows.length > 0 &&
-            typeof editingQuestion.rows[0] === "object" &&
-            "label" in editingQuestion.rows[0]
+            questionToLoad.rows.length > 0 &&
+            typeof questionToLoad.rows[0] === "object" &&
+            "label" in questionToLoad.rows[0]
           ) {
-            setRows(editingQuestion.rows as Array<{ label: string; cells: string[] }>)
+            setRows(questionToLoad.rows as Array<{ label: string; cells: string[] }>)
           } else {
-            setRows([{ label: "", cells: (editingQuestion.rows[0] as string[]) || [""] }])
+            setRows([{ label: "", cells: (questionToLoad.rows[0] as string[]) || [""] }])
           }
         } else {
           setRows([{ label: "", cells: [""] }])
         }
-        setChoices(editingQuestion.choices || {})
+        setChoices(questionToLoad.choices || {})
       } else if (
-        ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS", "MATCHING_HEADINGS"].includes(
-          editingQuestion.q_type,
-        )
+        ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(questionToLoad.q_type)
       ) {
-        if (editingQuestion.options && Array.isArray(editingQuestion.options)) {
-          setOptions(editingQuestion.options)
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setOptions(questionToLoad.options)
         } else {
           setOptions([{ key: "A", text: "" }])
         }
       }
 
-      if (editingQuestion.correct_answers && Array.isArray(editingQuestion.correct_answers)) {
-        setCorrectAnswers(editingQuestion.correct_answers)
+      if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
+        setCorrectAnswers(questionToLoad.correct_answers)
       } else {
         setCorrectAnswers([])
       }
@@ -122,8 +146,11 @@ export function CreateReadingQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
+      setMatchingHeadingsOptions([{ key: "A", text: "" }])
+      setMatchingHeadingsInputCount(1)
+      setMatchingHeadingsAnswers({})
     }
-  }, [editingQuestion, isOpen])
+  }, [editingQuestion, copyingQuestion, isOpen])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -161,22 +188,18 @@ export function CreateReadingQuestionModal({
       setMatchingAnswers({})
     } else if (value === "MATCHING_HEADINGS") {
       const matchingPassages = passages.filter((p) => p.type === "matching")
+      let inputCount = 1
+
       if (matchingPassages.length > 0) {
         const passageText = matchingPassages[0].reading_text
         const inputMatches = passageText.match(/\b(\d+)\./g) || []
-        const inputCount = inputMatches.length
-
-        const initialOptions = []
-        for (let i = 0; i < inputCount; i++) {
-          initialOptions.push({
-            key: (i + 1).toString(),
-            text: "",
-          })
-        }
-        setOptions(initialOptions.length > 0 ? initialOptions : [{ key: "1", text: "" }])
-      } else {
-        setOptions([{ key: "1", text: "" }])
+        inputCount = inputMatches.length > 0 ? inputMatches.length : 1
       }
+
+      setMatchingHeadingsInputCount(inputCount)
+      setMatchingHeadingsOptions([{ key: "A", text: "" }])
+      setMatchingHeadingsAnswers({})
+      setOptions([])
       setCorrectAnswers([])
       setColumns([])
       setRows([])
@@ -395,6 +418,44 @@ export function CreateReadingQuestionModal({
     }))
   }
 
+  const handleAddMatchingHeadingsOption = () => {
+    const nextKey = String.fromCharCode(65 + matchingHeadingsOptions.length)
+    setMatchingHeadingsOptions((prev) => [...prev, { key: nextKey, text: "" }])
+  }
+
+  const handleRemoveMatchingHeadingsOption = (index: number) => {
+    if (matchingHeadingsOptions.length > 1) {
+      const removedKey = matchingHeadingsOptions[index].key
+      const newOptions = matchingHeadingsOptions.filter((_, i) => i !== index)
+      const reassignedOptions = newOptions.map((option, i) => ({
+        ...option,
+        key: String.fromCharCode(65 + i),
+      }))
+      setMatchingHeadingsOptions(reassignedOptions)
+
+      const newAnswers = { ...matchingHeadingsAnswers }
+      Object.keys(newAnswers).forEach((answerKey) => {
+        if (newAnswers[answerKey] === removedKey) {
+          delete newAnswers[answerKey]
+        }
+      })
+      setMatchingHeadingsAnswers(newAnswers)
+    }
+  }
+
+  const handleMatchingHeadingsOptionChange = (index: number, value: string) => {
+    const newOptions = [...matchingHeadingsOptions]
+    newOptions[index].text = value
+    setMatchingHeadingsOptions(newOptions)
+  }
+
+  const handleMatchingHeadingsAnswerChange = (inputNumber: string, optionKey: string) => {
+    setMatchingHeadingsAnswers((prev) => ({
+      ...prev,
+      [inputNumber]: optionKey,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!readingQuestionsId) return
@@ -404,7 +465,16 @@ export function CreateReadingQuestionModal({
       return
     }
 
-    if (formData.q_type === "MATCHING_INFORMATION") {
+    if (formData.q_type === "MATCHING_HEADINGS") {
+      if (matchingHeadingsOptions.some((option) => !option.text.trim())) {
+        setError("Barcha optionlarni to'ldiring")
+        return
+      }
+      if (Object.keys(matchingHeadingsAnswers).length === 0) {
+        setError("Kamida bitta to'g'ri javobni belgilang")
+        return
+      }
+    } else if (formData.q_type === "MATCHING_INFORMATION") {
       if (Object.values(matchingChoices).some((choice) => !choice.trim())) {
         setError("Barcha tanlov variantlarini to'ldiring")
         return
@@ -417,11 +487,7 @@ export function CreateReadingQuestionModal({
         setError("Kamida bitta javobni belgilang")
         return
       }
-    } else if (
-      ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS", "MATCHING_HEADINGS"].includes(
-        formData.q_type,
-      )
-    ) {
+    } else if (["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(formData.q_type)) {
       if (options.some((opt) => !opt.text.trim())) {
         setError("Barcha variantlarni to'ldiring")
         return
@@ -456,7 +522,10 @@ export function CreateReadingQuestionModal({
         photo: formData.photo || undefined,
       }
 
-      if (formData.q_type === "MATCHING_INFORMATION") {
+      if (formData.q_type === "MATCHING_HEADINGS") {
+        questionData.options = matchingHeadingsOptions
+        questionData.answers = matchingHeadingsAnswers
+      } else if (formData.q_type === "MATCHING_INFORMATION") {
         questionData.choices = matchingChoices
         questionData.rows = matchingRows
         questionData.answers = matchingAnswers
@@ -464,18 +533,14 @@ export function CreateReadingQuestionModal({
         questionData.columns = columns
         questionData.rows = rows
         questionData.choices = choices
-      } else if (
-        ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS", "MATCHING_HEADINGS"].includes(
-          formData.q_type,
-        )
-      ) {
+      } else if (["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(formData.q_type)) {
         questionData.options = options
         questionData.correct_answers = correctAnswers
       } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
         questionData.correct_answers = correctAnswers
       }
 
-      if (editingQuestion) {
+      if (editingQuestion && !copyingQuestion) {
         await api.rQuestions.update(editingQuestion.id.toString(), questionData)
       } else {
         await api.rQuestions.create(questionData)
@@ -496,6 +561,9 @@ export function CreateReadingQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
+      setMatchingHeadingsOptions([{ key: "A", text: "" }])
+      setMatchingHeadingsInputCount(1)
+      setMatchingHeadingsAnswers({})
     } catch (error: any) {
       console.error("Failed to save reading question:", error)
       setError("Savol saqlashda xatolik yuz berdi")
@@ -504,17 +572,11 @@ export function CreateReadingQuestionModal({
     }
   }
 
-  const needsOptions = [
-    "MCQ_SINGLE",
-    "MCQ_MULTI",
-    "TFNG",
-    "SUMMARY_DRAG",
-    "SENTENCE_ENDINGS",
-    "MATCHING_HEADINGS",
-  ].includes(formData.q_type)
+  const needsOptions = ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(formData.q_type)
   const needsCorrectAnswers = ["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
+  const isMatchingHeadings = formData.q_type === "MATCHING_HEADINGS"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -522,7 +584,11 @@ export function CreateReadingQuestionModal({
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-blue-400" />
-            {editingQuestion ? "Reading Savolini Tahrirlash" : "Reading Savoli Qo'shish"}
+            {editingQuestion
+              ? "Reading Savolini Tahrirlash"
+              : copyingQuestion
+                ? "Reading Savolini Nusxalash"
+                : "Reading Savoli Qo'shish"}
           </DialogTitle>
         </DialogHeader>
 
@@ -533,14 +599,14 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
-          {formData.q_type === "MATCHING_HEADINGS" && passages.filter((p) => p.type === "matching").length > 0 && (
+          {isMatchingHeadings && (
             <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 space-y-2">
               <p className="text-blue-400 text-sm font-semibold">Matching Headings uchun muhim ma'lumot:</p>
               <ul className="text-blue-300 text-xs space-y-1 list-disc list-inside">
-                <li>Optionlar passagedagi tartib sonlariga bog'langan (1, 2, 3...)</li>
-                <li>To'g'ri javob - bu option raqamining o'zi (masalan: "1", "2", "3")</li>
-                <li>Agar passage input 1 uchun option 1 to'g'ri bo'lsa, javob "1" bo'ladi</li>
-                <li>Agar passage input 2 uchun option 3 to'g'ri bo'lsa, javob "3" bo'ladi</li>
+                <li>Optionlar inputlar sonidan ko'p bo'lishi mumkin</li>
+                <li>Har bir input uchun to'g'ri optionni tanlang</li>
+                <li>Optionlar harflar bilan belgilanadi: A, B, C, D...</li>
+                <li>To'g'ri javob - option harfi (masalan: input 1 uchun option C to'g'ri bo'lsa, javob "C")</li>
               </ul>
             </div>
           )}
@@ -596,85 +662,89 @@ export function CreateReadingQuestionModal({
             />
           </div>
 
-          {needsOptions && (
+          {(needsOptions || formData.q_type === "MATCHING_HEADINGS") && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-slate-300 text-sm">
                   Javob Variantlari *
                   {formData.q_type === "MATCHING_HEADINGS" && (
                     <span className="text-xs text-blue-400 ml-2">
-                      (Raqamlar: 1, 2, 3... - to'g'ri javob sifatida saqlanadi)
+                      (Harflar bilan: A, B, C... - to'g'ri javob sifatida saqlanadi)
                     </span>
                   )}
                 </Label>
-                <Button
-                  type="button"
-                  onClick={handleAddOption}
-                  variant="outline"
-                  size="sm"
-                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Variant
-                </Button>
+                {formData.q_type !== "MATCHING_HEADINGS" && (
+                  <Button
+                    type="button"
+                    onClick={handleAddOption}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                )}
               </div>
 
-              <div className="space-y-2">
-                {options.map((option, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 flex-1">
-                      <span
-                        className={`font-mono text-sm w-6 ${
-                          formData.q_type === "MATCHING_HEADINGS" ? "text-blue-400 font-bold" : "text-slate-300"
-                        }`}
-                      >
-                        {option.key}:
-                      </span>
-                      <Input
-                        value={option.text}
-                        onChange={(e) => handleOptionChange(index, e.target.value)}
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={
-                          formData.q_type === "MATCHING_HEADINGS"
-                            ? `Heading ${option.key} (to'g'ri javob: ${option.key})`
-                            : `Option ${option.key}`
-                        }
-                        required
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => handleCorrectAnswerToggle(option.key)}
-                        variant={correctAnswers.includes(option.key) ? "default" : "outline"}
-                        size="sm"
-                        className={
-                          correctAnswers.includes(option.key)
-                            ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7 min-w-[60px]"
-                            : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7 min-w-[60px]"
-                        }
-                      >
-                        {correctAnswers.includes(option.key)
-                          ? formData.q_type === "MATCHING_HEADINGS"
-                            ? `✓ ${option.key}`
-                            : "To'g'ri"
-                          : formData.q_type === "MATCHING_HEADINGS"
-                            ? option.key
-                            : "Belgilash"}
-                      </Button>
+              {formData.q_type !== "MATCHING_HEADINGS" && (
+                <div className="space-y-2">
+                  {options.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span
+                          className={`font-mono text-sm w-6 ${
+                            formData.q_type === "MATCHING_HEADINGS" ? "text-blue-400 font-bold" : "text-slate-300"
+                          }`}
+                        >
+                          {option.key}:
+                        </span>
+                        <Input
+                          value={option.text}
+                          onChange={(e) => handleOptionChange(index, e.target.value)}
+                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                          placeholder={
+                            formData.q_type === "MATCHING_HEADINGS"
+                              ? `Heading ${option.key} (to'g'ri javob: ${option.key})`
+                              : `Option ${option.key}`
+                          }
+                          required
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => handleCorrectAnswerToggle(option.key)}
+                          variant={correctAnswers.includes(option.key) ? "default" : "outline"}
+                          size="sm"
+                          className={
+                            correctAnswers.includes(option.key)
+                              ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7 min-w-[60px]"
+                              : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7 min-w-[60px]"
+                          }
+                        >
+                          {correctAnswers.includes(option.key)
+                            ? formData.q_type === "MATCHING_HEADINGS"
+                              ? `✓ ${option.key}`
+                              : "To'g'ri"
+                            : formData.q_type === "MATCHING_HEADINGS"
+                              ? option.key
+                              : "Belgilash"}
+                        </Button>
+                      </div>
+                      {options.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveOption(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
-                    {options.length > 1 && (
-                      <Button
-                        type="button"
-                        onClick={() => handleRemoveOption(index)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {formData.q_type === "MATCHING_HEADINGS" && correctAnswers.length > 0 && (
                 <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-2 mt-2">
@@ -999,6 +1069,113 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
+          {isMatchingHeadings && (
+            <div className="space-y-4">
+              {/* Input Count */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Inputlar soni (passagedagi tartib raqamlar)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={matchingHeadingsInputCount}
+                  onChange={(e) => setMatchingHeadingsInputCount(Number.parseInt(e.target.value) || 1)}
+                  className="bg-slate-700/50 border-slate-600 text-white w-32"
+                />
+                <p className="text-xs text-slate-400">Passageda nechta tartib raqam bor? (1., 2., 3., ...)</p>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Optionlar (headings) *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddMatchingHeadingsOption}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Option
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {matchingHeadingsOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="text-blue-400 font-bold font-mono text-sm w-8">{option.key}:</span>
+                      <Input
+                        value={option.text}
+                        onChange={(e) => handleMatchingHeadingsOptionChange(index, e.target.value)}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Option ${option.key} (masalan: The importance of...)`}
+                        required
+                      />
+                      {matchingHeadingsOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveMatchingHeadingsOption(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Correct Answers Selection */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">To'g'ri javoblarni belgilang *</Label>
+                <div className="space-y-2">
+                  {Array.from({ length: matchingHeadingsInputCount }, (_, i) => i + 1).map((inputNum) => (
+                    <div key={inputNum} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-24">Input {inputNum}:</span>
+                      <Select
+                        value={matchingHeadingsAnswers[inputNum.toString()] || ""}
+                        onValueChange={(value) => handleMatchingHeadingsAnswerChange(inputNum.toString(), value)}
+                      >
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Option tanlang" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {matchingHeadingsOptions.map((option) => (
+                            <SelectItem key={option.key} value={option.key}>
+                              {option.key}: {option.text.substring(0, 50)}...
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {matchingHeadingsAnswers[inputNum.toString()] && (
+                        <span className="text-green-400 text-sm font-bold w-12">
+                          ✓ {matchingHeadingsAnswers[inputNum.toString()]}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              {Object.keys(matchingHeadingsAnswers).length > 0 && (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-3">
+                  <p className="text-green-400 text-sm font-semibold mb-2">To'g'ri javoblar:</p>
+                  <div className="space-y-1">
+                    {Object.entries(matchingHeadingsAnswers)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([inputNum, optionKey]) => (
+                        <p key={inputNum} className="text-green-300 text-xs">
+                          Input {inputNum} → Option {optionKey}
+                        </p>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2 pt-3">
             <Button
               type="button"
@@ -1010,7 +1187,13 @@ export function CreateReadingQuestionModal({
               Bekor qilish
             </Button>
             <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" disabled={loading}>
-              {loading ? "Saqlanmoqda..." : editingQuestion ? "Saqlash" : "Yaratish"}
+              {loading
+                ? "Saqlanmoqda..."
+                : editingQuestion
+                  ? "Saqlash"
+                  : copyingQuestion
+                    ? "Nusxa Yaratish"
+                    : "Yaratish"}
             </Button>
           </div>
         </form>

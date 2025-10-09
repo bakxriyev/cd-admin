@@ -41,6 +41,7 @@ export default function ReadingDetailPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<string>("")
   const [editingSection, setEditingSection] = useState<ReadingQuestions | null>(null)
   const [editingQuestion, setEditingQuestion] = useState<ReadingQuestion | null>(null)
+  const [copyingQuestion, setCopyingQuestion] = useState<ReadingQuestion | null>(null)
   const [editingPassage, setEditingPassage] = useState<Passage | null>(null)
   const [collapsedPassages, setCollapsedPassages] = useState<Record<number, boolean>>({})
   const [userType, setUserType] = useState<string>("")
@@ -70,16 +71,33 @@ export default function ReadingDetailPage() {
       ])
 
       console.log("[v0] Reading data received:", readingData)
-      console.log("[v0] Passages data received:", passagesData)
+      console.log("[v0] All passages data received:", passagesData)
 
       setReading(readingData)
 
       const passagesArray = Array.isArray(passagesData) ? passagesData : []
-      const filteredPassages = passagesArray.filter((passage) => passage.reading_id === Number.parseInt(readingId))
+      const currentReadingId = Number.parseInt(readingId)
+
+      // Filter passages by reading_id to ensure we only show passages for this specific reading
+      const filteredPassages = passagesArray.filter((passage) => {
+        const passageReadingId = Number(passage.reading_id)
+        console.log(
+          "[v0] Passage",
+          passage.id,
+          "reading_id:",
+          passageReadingId,
+          "current reading:",
+          currentReadingId,
+          "match:",
+          passageReadingId === currentReadingId,
+        )
+        return passageReadingId === currentReadingId
+      })
 
       console.log("[v0] Filtered passages for reading", readingId, ":", filteredPassages)
       setPassages(filteredPassages)
 
+      // Initialize collapsed state for filtered passages only
       const initialCollapsedState: Record<number, boolean> = {}
       filteredPassages.forEach((passage) => {
         initialCollapsedState[passage.id] = true
@@ -109,6 +127,7 @@ export default function ReadingDetailPage() {
   const handleQuestionCreated = () => {
     setShowQuestionModal(false)
     setEditingQuestion(null)
+    setCopyingQuestion(null)
     setSelectedSectionId("")
     fetchReadingData()
   }
@@ -131,6 +150,14 @@ export default function ReadingDetailPage() {
 
   const handleEditQuestion = (question: ReadingQuestion) => {
     setEditingQuestion(question)
+    setCopyingQuestion(null)
+    setSelectedSectionId(question.reading_questions_id.toString())
+    setShowQuestionModal(true)
+  }
+
+  const handleCopyQuestion = (question: ReadingQuestion) => {
+    setCopyingQuestion(question)
+    setEditingQuestion(null)
     setSelectedSectionId(question.reading_questions_id.toString())
     setShowQuestionModal(true)
   }
@@ -442,6 +469,15 @@ export default function ReadingDetailPage() {
                                   {!isClientUser && (
                                     <div className="flex items-center gap-1">
                                       <Button
+                                        onClick={() => handleCopyQuestion(question)}
+                                        size="sm"
+                                        variant="outline"
+                                        className="border-blue-600 text-blue-400 hover:bg-blue-700/20 text-xs px-1 py-0 h-6"
+                                        title="Savolni nusxalash"
+                                      >
+                                        Copy
+                                      </Button>
+                                      <Button
                                         onClick={() => handleEditQuestion(question)}
                                         size="sm"
                                         variant="outline"
@@ -495,11 +531,13 @@ export default function ReadingDetailPage() {
             onClose={() => {
               setShowQuestionModal(false)
               setEditingQuestion(null)
+              setCopyingQuestion(null)
               setSelectedSectionId("")
             }}
             readingQuestionsId={selectedSectionId}
             onQuestionCreated={handleQuestionCreated}
             editingQuestion={editingQuestion}
+            copyingQuestion={copyingQuestion}
             passages={passages}
           />
 

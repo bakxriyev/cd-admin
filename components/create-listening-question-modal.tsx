@@ -34,6 +34,7 @@ interface CreateListeningQuestionModalProps {
   listeningQuestionsId: string
   onQuestionCreated: () => void
   editingQuestion?: ListeningQuestion | null
+  copyingQuestion?: ListeningQuestion | null
 }
 
 export function CreateListeningQuestionModal({
@@ -42,6 +43,7 @@ export function CreateListeningQuestionModal({
   listeningQuestionsId,
   onQuestionCreated,
   editingQuestion,
+  copyingQuestion,
 }: CreateListeningQuestionModalProps) {
   const [formData, setFormData] = useState({
     q_type: "MCQ_SINGLE" as ListeningQuestion["q_type"],
@@ -64,48 +66,50 @@ export function CreateListeningQuestionModal({
   const imageRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {
-    if (editingQuestion) {
+    const questionToLoad = editingQuestion || copyingQuestion
+
+    if (questionToLoad) {
       setFormData({
-        q_type: editingQuestion.q_type,
-        q_text: editingQuestion.q_text || "",
+        q_type: questionToLoad.q_type,
+        q_text: questionToLoad.q_text || "",
       })
 
-      if (editingQuestion.q_type === "MAP_LABELING") {
-        if (editingQuestion.rows && typeof editingQuestion.rows === "object") {
-          setMapPositions(editingQuestion.rows as Record<string, { x: string; y: string }>)
+      if (questionToLoad.q_type === "MAP_LABELING") {
+        if (questionToLoad.rows && typeof questionToLoad.rows === "object") {
+          setMapPositions(questionToLoad.rows as Record<string, { x: string; y: string }>)
         }
-        if (editingQuestion.options && Array.isArray(editingQuestion.options)) {
-          setOptions(editingQuestion.options)
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setOptions(questionToLoad.options)
         }
-        if (editingQuestion.correct_answers && Array.isArray(editingQuestion.correct_answers)) {
-          setCorrectAnswers(editingQuestion.correct_answers)
+        if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
+          setCorrectAnswers(questionToLoad.correct_answers)
         }
-      } else if (editingQuestion.q_type === "MATCHING_INFORMATION") {
-        if (editingQuestion.choices && typeof editingQuestion.choices === "object") {
-          setMatchingChoices(editingQuestion.choices)
+      } else if (questionToLoad.q_type === "MATCHING_INFORMATION") {
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setMatchingChoices(questionToLoad.choices)
         }
-        if (editingQuestion.rows && Array.isArray(editingQuestion.rows)) {
-          setMatchingRows(editingQuestion.rows)
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setMatchingRows(questionToLoad.rows)
         }
-        if (editingQuestion.answers && typeof editingQuestion.answers === "object") {
-          setMatchingAnswers(editingQuestion.answers)
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setMatchingAnswers(questionToLoad.answers)
         }
-      } else if (editingQuestion.q_type === "TABLE_COMPLETION") {
-        setColumns(editingQuestion.columns || [""])
-        if (editingQuestion.rows && Array.isArray(editingQuestion.rows)) {
+      } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
+        setColumns(questionToLoad.columns || [""])
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
           if (
-            editingQuestion.rows.length > 0 &&
-            typeof editingQuestion.rows[0] === "object" &&
-            "label" in editingQuestion.rows[0]
+            questionToLoad.rows.length > 0 &&
+            typeof questionToLoad.rows[0] === "object" &&
+            "label" in questionToLoad.rows[0]
           ) {
-            setRows(editingQuestion.rows as Array<{ label: string; cells: string[] }>)
+            setRows(questionToLoad.rows as Array<{ label: string; cells: string[] }>)
           } else {
-            setRows([{ label: "", cells: (editingQuestion.rows[0] as string[]) || [""] }])
+            setRows([{ label: "", cells: (questionToLoad.rows[0] as string[]) || [""] }])
           }
         } else {
           setRows([{ label: "", cells: [""] }])
         }
-        setChoices(editingQuestion.choices || {})
+        setChoices(questionToLoad.choices || {})
       } else if (
         [
           "MCQ_SINGLE",
@@ -116,17 +120,17 @@ export function CreateListeningQuestionModal({
           "SENTENCE_ENDINGS",
           "MATCHING_HEADINGS",
           "MULTIPLE_CHOICE",
-        ].includes(editingQuestion.q_type)
+        ].includes(questionToLoad.q_type)
       ) {
-        if (editingQuestion.options && Array.isArray(editingQuestion.options)) {
-          setOptions(editingQuestion.options)
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setOptions(questionToLoad.options)
         } else {
           setOptions([{ key: "A", text: "" }])
         }
       }
 
-      if (editingQuestion.correct_answers && Array.isArray(editingQuestion.correct_answers)) {
-        setCorrectAnswers(editingQuestion.correct_answers)
+      if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
+        setCorrectAnswers(questionToLoad.correct_answers)
       } else {
         setCorrectAnswers([])
       }
@@ -147,7 +151,7 @@ export function CreateListeningQuestionModal({
       setImagePreview("")
     }
     setPhotoFile(null)
-  }, [editingQuestion, isOpen])
+  }, [editingQuestion, copyingQuestion, isOpen])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -514,7 +518,8 @@ export function CreateListeningQuestionModal({
     }
 
     if (formData.q_type === "MAP_LABELING") {
-      if (!photoFile && !editingQuestion) {
+      if (!photoFile && !editingQuestion && !copyingQuestion) {
+        // <-- Changed this condition
         setError("MAP_LABELING turi uchun rasm majburiy")
         return
       }
@@ -579,7 +584,7 @@ export function CreateListeningQuestionModal({
           formDataToSend.append("correct_answers", JSON.stringify(correctAnswers))
         }
 
-        if (editingQuestion) {
+        if (editingQuestion && !copyingQuestion) {
           await api.lQuestions.update(editingQuestion.id.toString(), formDataToSend)
         } else {
           await api.lQuestions.create(formDataToSend)
@@ -622,7 +627,7 @@ export function CreateListeningQuestionModal({
           dataToSend.correct_answers = correctAnswers
         }
 
-        if (editingQuestion) {
+        if (editingQuestion && !copyingQuestion) {
           await api.lQuestions.update(editingQuestion.id.toString(), dataToSend)
         } else {
           await api.lQuestions.create(dataToSend)
@@ -686,7 +691,11 @@ export function CreateListeningQuestionModal({
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Headphones className="w-5 h-5 text-green-400" />
-            {editingQuestion ? "Listening Savolini Tahrirlash" : "Listening Savoli Qo'shish"}
+            {editingQuestion
+              ? "Listening Savolini Tahrirlash"
+              : copyingQuestion
+                ? "Listening Savolini Nusxalash"
+                : "Listening Savoli Qo'shish"}
           </DialogTitle>
         </DialogHeader>
 
@@ -1259,7 +1268,13 @@ export function CreateListeningQuestionModal({
               Bekor qilish
             </Button>
             <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={loading}>
-              {loading ? "Saqlanmoqda..." : editingQuestion ? "Saqlash" : "Yaratish"}
+              {loading
+                ? "Saqlanmoqda..."
+                : editingQuestion
+                  ? "Saqlash"
+                  : copyingQuestion
+                    ? "Nusxa Yaratish"
+                    : "Yaratish"}
             </Button>
           </div>
         </form>
