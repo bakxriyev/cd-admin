@@ -23,9 +23,8 @@ const QUESTION_TYPES = {
   SENTENCE_ENDINGS: "SENTENCE_ENDINGS",
   MATCHING_HEADINGS: "MATCHING_HEADINGS",
   SHORT_ANSWER: "SHORT_ANSWER",
-  MULTIPLE_CHOICE: "MULTIPLE_CHOICE",
-  MATCHING: "MATCHING",
   MAP_LABELING: "MAP_LABELING",
+  FLOW_CHART: "FLOW_CHART",
 }
 
 interface CreateListeningQuestionModalProps {
@@ -57,6 +56,9 @@ export function CreateListeningQuestionModal({
   const [matchingChoices, setMatchingChoices] = useState<Record<string, string>>({ A: "" })
   const [matchingRows, setMatchingRows] = useState<string[]>([""])
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({})
+  const [flowChartChoices, setFlowChartChoices] = useState<Record<string, string>>({ "1": "" })
+  const [flowChartOptions, setFlowChartOptions] = useState<string[]>([""])
+  const [flowChartAnswers, setFlowChartAnswers] = useState<Record<string, string>>({})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -74,7 +76,17 @@ export function CreateListeningQuestionModal({
         q_text: questionToLoad.q_text || "",
       })
 
-      if (questionToLoad.q_type === "MAP_LABELING") {
+      if (questionToLoad.q_type === "FLOW_CHART") {
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setFlowChartChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setFlowChartOptions(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setFlowChartAnswers(questionToLoad.correct_answers as Record<string, string>)
+        }
+      } else if (questionToLoad.q_type === "MAP_LABELING") {
         if (questionToLoad.rows && typeof questionToLoad.rows === "object") {
           setMapPositions(questionToLoad.rows as Record<string, { x: string; y: string }>)
         }
@@ -119,7 +131,6 @@ export function CreateListeningQuestionModal({
           "SUMMARY_DRAG",
           "SENTENCE_ENDINGS",
           "MATCHING_HEADINGS",
-          "MULTIPLE_CHOICE",
         ].includes(questionToLoad.q_type)
       ) {
         if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
@@ -147,6 +158,9 @@ export function CreateListeningQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
+      setFlowChartChoices({ "1": "" })
+      setFlowChartOptions([""])
+      setFlowChartAnswers({})
       setMapPositions({})
       setImagePreview("")
     }
@@ -160,7 +174,21 @@ export function CreateListeningQuestionModal({
   const handleQuestionTypeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, q_type: value as ListeningQuestion["q_type"] }))
 
-    if (value === "TABLE_COMPLETION") {
+    if (value === "FLOW_CHART") {
+      setFlowChartChoices({ "1": "" })
+      setFlowChartOptions([""])
+      setFlowChartAnswers({})
+      setOptions([])
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+      setMapPositions({})
+      setImagePreview("")
+    } else if (value === "TABLE_COMPLETION") {
       setColumns([""])
       setRows([{ label: "", cells: [""] }])
       setChoices({})
@@ -197,13 +225,11 @@ export function CreateListeningQuestionModal({
       [
         "MCQ_SINGLE",
         "MCQ_MULTI",
-        "MATCHING",
         "MAP_LABELING",
         "TFNG",
         "SUMMARY_DRAG",
         "SENTENCE_ENDINGS",
         "MATCHING_HEADINGS",
-        "MULTIPLE_CHOICE",
       ].includes(value)
     ) {
       setOptions([{ key: "A", text: "" }])
@@ -459,6 +485,78 @@ export function CreateListeningQuestionModal({
     }))
   }
 
+  const handleAddFlowChartChoice = () => {
+    const keys = Object.keys(flowChartChoices)
+    const nextKey = (keys.length + 1).toString()
+    setFlowChartChoices((prev) => ({ ...prev, [nextKey]: "" }))
+  }
+
+  const handleRemoveFlowChartChoice = (key: string) => {
+    if (Object.keys(flowChartChoices).length > 1) {
+      const newChoices = { ...flowChartChoices }
+      delete newChoices[key]
+
+      // Reassign keys to maintain sequential order
+      const reassigned: Record<string, string> = {}
+      Object.values(newChoices).forEach((value, index) => {
+        reassigned[(index + 1).toString()] = value
+      })
+      setFlowChartChoices(reassigned)
+
+      // Update answers to match new keys
+      const newAnswers = { ...flowChartAnswers }
+      delete newAnswers[key]
+      const reassignedAnswers: Record<string, string> = {}
+      Object.entries(newAnswers).forEach(([answerKey, value]) => {
+        const numKey = Number.parseInt(answerKey)
+        const keyNum = Number.parseInt(key)
+        if (numKey > keyNum) {
+          reassignedAnswers[(numKey - 1).toString()] = value
+        } else {
+          reassignedAnswers[answerKey] = value
+        }
+      })
+      setFlowChartAnswers(reassignedAnswers)
+    }
+  }
+
+  const handleFlowChartChoiceChange = (key: string, value: string) => {
+    setFlowChartChoices((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleAddFlowChartOption = () => {
+    setFlowChartOptions((prev) => [...prev, ""])
+  }
+
+  const handleRemoveFlowChartOption = (index: number) => {
+    if (flowChartOptions.length > 1) {
+      const removedOption = flowChartOptions[index]
+      setFlowChartOptions((prev) => prev.filter((_, i) => i !== index))
+
+      // Remove answers that reference this option
+      const newAnswers = { ...flowChartAnswers }
+      Object.keys(newAnswers).forEach((key) => {
+        if (newAnswers[key] === removedOption) {
+          delete newAnswers[key]
+        }
+      })
+      setFlowChartAnswers(newAnswers)
+    }
+  }
+
+  const handleFlowChartOptionChange = (index: number, value: string) => {
+    const newOptions = [...flowChartOptions]
+    newOptions[index] = value
+    setFlowChartOptions(newOptions)
+  }
+
+  const handleFlowChartAnswerChange = (choiceKey: string, optionValue: string) => {
+    setFlowChartAnswers((prev) => ({
+      ...prev,
+      [choiceKey]: optionValue,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!listeningQuestionsId) return
@@ -468,7 +566,16 @@ export function CreateListeningQuestionModal({
       return
     }
 
-    if (formData.q_type === "MATCHING_INFORMATION") {
+    if (formData.q_type === "FLOW_CHART") {
+      if (Object.values(flowChartChoices).some((choice) => !choice.trim())) {
+        setError("Barcha tanlov variantlarini to'ldiring")
+        return
+      }
+      if (flowChartOptions.some((opt) => !opt.trim())) {
+        setError("Barcha variantlarni to'ldiring")
+        return
+      }
+    } else if (formData.q_type === "MATCHING_INFORMATION") {
       if (Object.values(matchingChoices).some((choice) => !choice.trim())) {
         setError("Barcha tanlov variantlarini to'ldiring")
         return
@@ -582,6 +689,10 @@ export function CreateListeningQuestionModal({
           formDataToSend.append("correct_answers", JSON.stringify(correctAnswers))
         } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)) {
           formDataToSend.append("correct_answers", JSON.stringify(correctAnswers))
+        } else if (formData.q_type === "FLOW_CHART") {
+          formDataToSend.append("choices", JSON.stringify(flowChartChoices))
+          formDataToSend.append("options", JSON.stringify(flowChartOptions))
+          formDataToSend.append("correct_answers", JSON.stringify(flowChartAnswers))
         }
 
         if (editingQuestion && !copyingQuestion) {
@@ -625,6 +736,10 @@ export function CreateListeningQuestionModal({
           dataToSend.correct_answers = correctAnswers
         } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)) {
           dataToSend.correct_answers = correctAnswers
+        } else if (formData.q_type === "FLOW_CHART") {
+          dataToSend.choices = flowChartChoices
+          dataToSend.options = flowChartOptions
+          dataToSend.correct_answers = flowChartAnswers
         }
 
         if (editingQuestion && !copyingQuestion) {
@@ -648,6 +763,9 @@ export function CreateListeningQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
+      setFlowChartChoices({ "1": "" })
+      setFlowChartOptions([""])
+      setFlowChartAnswers({})
       setMapPositions({})
       setImagePreview("")
       setPhotoFile(null)
@@ -683,11 +801,12 @@ export function CreateListeningQuestionModal({
   const needsCorrectAnswers = ["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
+  const isFlowChart = formData.q_type === "FLOW_CHART"
   const needsPhoto = ["MAP_LABELING"].includes(formData.q_type)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Headphones className="w-5 h-5 text-green-400" />
@@ -699,7 +818,7 @@ export function CreateListeningQuestionModal({
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-2">
               <p className="text-red-400 text-sm">{error}</p>
@@ -729,6 +848,7 @@ export function CreateListeningQuestionModal({
                 <SelectItem value="MULTIPLE_CHOICE">MULTIPLE_CHOICE</SelectItem>
                 <SelectItem value="MATCHING">MATCHING</SelectItem>
                 <SelectItem value="MAP_LABELING">MAP_LABELING</SelectItem>
+                <SelectItem value="FLOW_CHART">FLOW_CHART</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1225,7 +1345,7 @@ export function CreateListeningQuestionModal({
                         required
                       />
                       <Select
-                        value={matchingAnswers[(index + 1).toString()] || ""}
+                        value={matchingAnswers[(index + 1).toString()] || undefined}
                         onValueChange={(value) => handleMatchingAnswerChange(index, value)}
                       >
                         <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-20">
@@ -1250,6 +1370,160 @@ export function CreateListeningQuestionModal({
                           <X className="w-4 h-4" />
                         </Button>
                       )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isFlowChart && (
+            <div className="space-y-4">
+              {/* Flow Chart Choices (numbered statements with blanks) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm font-semibold">Bo'sh Joylar (____) *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddFlowChartChoice}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Bo'sh Joy
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Har bir gapda ____ belgisini qo'ying, bu yerga javob kiritiladi
+                </p>
+                <div className="space-y-2">
+                  {Object.entries(flowChartChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-blue-400 font-mono text-sm font-bold w-8">{key}.</span>
+                      <Input
+                        value={value}
+                        onChange={(e) => handleFlowChartChoiceChange(key, e.target.value)}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Gapni kiriting (masalan: The rover is directed to a ____ which has organic material.)`}
+                        required
+                      />
+                      {Object.keys(flowChartChoices).length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveFlowChartChoice(key)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Flow Chart Options (possible answers) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm font-semibold">Tanlov Variantlari *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddFlowChartOption}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Bo'sh joylarga to'ldirish uchun mumkin bo'lgan javoblar ro'yxati
+                </p>
+                <div className="space-y-2">
+                  {flowChartOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="text-slate-400 text-sm w-8">•</span>
+                      <Input
+                        value={option}
+                        onChange={(e) => handleFlowChartOptionChange(index, e.target.value)}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${index + 1} (masalan: fossils, contamination, site...)`}
+                        required
+                      />
+                      {flowChartOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveFlowChartOption(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Flow Chart Correct Answers */}
+              <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar (Ixtiyoriy)</Label>
+                  <span className="text-xs text-slate-400 italic">Ba'zi bo'sh joylar oddiy matn bo'lishi mumkin</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Har bir bo'sh joy uchun to'g'ri variantni tanlang. Agar bo'sh joy oddiy matn bo'lsa, javob
+                  tanlamasangiz ham bo'ladi.
+                </p>
+                <div className="space-y-3">
+                  {Object.keys(flowChartChoices).map((choiceKey) => (
+                    <div
+                      key={choiceKey}
+                      className="flex items-start gap-3 bg-slate-800/50 p-3 rounded border border-slate-600"
+                    >
+                      <span className="text-blue-400 font-mono text-sm font-bold w-8 mt-2">{choiceKey}.</span>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-slate-300 text-sm">{flowChartChoices[choiceKey]}</p>
+                        <Select
+                          value={flowChartAnswers[choiceKey] || undefined}
+                          onValueChange={(value) => handleFlowChartAnswerChange(choiceKey, value)}
+                        >
+                          <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-full">
+                            <SelectValue placeholder="Javobni tanlang (ixtiyoriy)" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-700 border-slate-600">
+                            {flowChartOptions
+                              .filter((option) => option.trim() !== "")
+                              .map((option, index) => (
+                                <SelectItem key={index} value={option}>
+                                  {option}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {flowChartAnswers[choiceKey] && (
+                          <div className="flex items-center gap-2 text-xs text-green-400">
+                            <span>✓ Tanlangan: {flowChartAnswers[choiceKey]}</span>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                const newAnswers = { ...flowChartAnswers }
+                                delete newAnswers[choiceKey]
+                                setFlowChartAnswers(newAnswers)
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-2 text-red-400 hover:text-red-300"
+                            >
+                              Bekor qilish
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

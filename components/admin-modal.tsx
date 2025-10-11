@@ -96,10 +96,12 @@ export function AdminModal({ isOpen, onClose, onSuccess, admin, mode }: AdminMod
         console.log("[v0] Creating admin with data:", {
           ...submitData,
           password: formData.password.trim(),
+          type: "admin",
         })
         await api.admins.create({
           ...submitData,
           password: formData.password.trim(),
+          type: "admin",
         })
         toast.success("Admin muvaffaqiyatli yaratildi")
       } else if (mode === "edit" && admin) {

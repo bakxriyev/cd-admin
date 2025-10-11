@@ -289,7 +289,7 @@ export default function AssessmentPage() {
 
     try {
       await api.speaking.create({
-        user_id: Number.parseInt(selectedAssessment.userId),
+        user_id: selectedAssessment.userId,
         exam_id: Number.parseInt(selectedAssessment.examId),
         score: Number.parseFloat(speakingScore),
       })

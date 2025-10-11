@@ -534,14 +534,14 @@ export const api = {
   admins: {
     getAll: () => apiRequest("/admins"),
     getById: (id: string) => apiRequest(`/admins/${id}`),
-    create: (adminData: { full_name: string; email: string; password: string; phone_number: string; role?: string }) =>
+    create: (adminData: { full_name: string; email: string; password: string; phone_number: string; type?: string }) =>
       apiRequest("/admins", {
         method: "POST",
         body: JSON.stringify(adminData),
       }),
     update: (
       id: string,
-      adminData: { full_name?: string; email?: string; password?: string; phone_number?: string; role?: string },
+      adminData: { full_name?: string; email?: string; password?: string; phone_number?: string; type?: string },
     ) =>
       apiRequest(`/admins/${id}`, {
         method: "PUT",

@@ -190,7 +190,7 @@ export default function ListeningDetailPage() {
     const audioFile = listening.audio_file || listening.audio_url || listening.audioFile || listening.audioUrl
     if (!audioFile) return ""
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://backend.realexamielts.uz"
     const audioUrl = `${baseUrl}${audioFile}`
 
     console.log("[v0] Constructed audio URL:", audioUrl)
@@ -437,7 +437,9 @@ export default function ListeningDetailPage() {
                                           To'g'ri:{" "}
                                           {Array.isArray(question.correct_answers)
                                             ? question.correct_answers.join(", ")
-                                            : question.correct_answers}
+                                            : typeof question.correct_answers === "object"
+                                              ? JSON.stringify(question.correct_answers)
+                                              : question.correct_answers}
                                         </span>
                                       )}
                                     </div>
