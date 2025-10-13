@@ -23,8 +23,11 @@ const QUESTION_TYPES = {
   SENTENCE_ENDINGS: "SENTENCE_ENDINGS",
   MATCHING_HEADINGS: "MATCHING_HEADINGS",
   SHORT_ANSWER: "SHORT_ANSWER",
+  MULTIPLE_CHOICE: "MULTIPLE_CHOICE",
+  MATCHING: "MATCHING",
   MAP_LABELING: "MAP_LABELING",
   FLOW_CHART: "FLOW_CHART",
+  NOTE_COMPLETION: "NOTE_COMPLETION",
 }
 
 interface CreateListeningQuestionModalProps {
@@ -59,6 +62,8 @@ export function CreateListeningQuestionModal({
   const [flowChartChoices, setFlowChartChoices] = useState<Record<string, string>>({ "1": "" })
   const [flowChartOptions, setFlowChartOptions] = useState<string[]>([""])
   const [flowChartAnswers, setFlowChartAnswers] = useState<Record<string, string>>({})
+  const [noteTemplate, setNoteTemplate] = useState("")
+  const [noteAnswers, setNoteAnswers] = useState<Record<string, string>>({})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -76,7 +81,14 @@ export function CreateListeningQuestionModal({
         q_text: questionToLoad.q_text || "",
       })
 
-      if (questionToLoad.q_type === "FLOW_CHART") {
+      if (questionToLoad.q_type === "NOTE_COMPLETION") {
+        if (typeof questionToLoad.options === "string") {
+          setNoteTemplate(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setNoteAnswers(questionToLoad.correct_answers as Record<string, string>)
+        }
+      } else if (questionToLoad.q_type === "FLOW_CHART") {
         if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
           setFlowChartChoices(questionToLoad.choices)
         }
@@ -131,6 +143,7 @@ export function CreateListeningQuestionModal({
           "SUMMARY_DRAG",
           "SENTENCE_ENDINGS",
           "MATCHING_HEADINGS",
+          "MULTIPLE_CHOICE",
         ].includes(questionToLoad.q_type)
       ) {
         if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
@@ -163,6 +176,8 @@ export function CreateListeningQuestionModal({
       setFlowChartAnswers({})
       setMapPositions({})
       setImagePreview("")
+      setNoteTemplate("")
+      setNoteAnswers({})
     }
     setPhotoFile(null)
   }, [editingQuestion, copyingQuestion, isOpen])
@@ -174,7 +189,23 @@ export function CreateListeningQuestionModal({
   const handleQuestionTypeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, q_type: value as ListeningQuestion["q_type"] }))
 
-    if (value === "FLOW_CHART") {
+    if (value === "NOTE_COMPLETION") {
+      setNoteTemplate("")
+      setNoteAnswers({})
+      setOptions([])
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+      setFlowChartChoices({ "1": "" })
+      setFlowChartOptions([""])
+      setFlowChartAnswers({})
+      setMapPositions({})
+      setImagePreview("")
+    } else if (value === "FLOW_CHART") {
       setFlowChartChoices({ "1": "" })
       setFlowChartOptions([""])
       setFlowChartAnswers({})
@@ -225,11 +256,13 @@ export function CreateListeningQuestionModal({
       [
         "MCQ_SINGLE",
         "MCQ_MULTI",
+        "MATCHING",
         "MAP_LABELING",
         "TFNG",
         "SUMMARY_DRAG",
         "SENTENCE_ENDINGS",
         "MATCHING_HEADINGS",
+        "MULTIPLE_CHOICE",
       ].includes(value)
     ) {
       setOptions([{ key: "A", text: "" }])
@@ -557,6 +590,27 @@ export function CreateListeningQuestionModal({
     }))
   }
 
+  const countBlanks = (text: string): number => {
+    const matches = text.match(/____/g)
+    return matches ? matches.length : 0
+  }
+
+  const handleNoteTemplateChange = (value: string) => {
+    setNoteTemplate(value)
+
+    // Auto-create answer fields based on number of blanks
+    const blankCount = countBlanks(value)
+    const newAnswers: Record<string, string> = {}
+    for (let i = 1; i <= blankCount; i++) {
+      newAnswers[i.toString()] = noteAnswers[i.toString()] || ""
+    }
+    setNoteAnswers(newAnswers)
+  }
+
+  const handleNoteAnswerChange = (key: string, value: string) => {
+    setNoteAnswers((prev) => ({ ...prev, [key]: value }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!listeningQuestionsId) return
@@ -566,7 +620,21 @@ export function CreateListeningQuestionModal({
       return
     }
 
-    if (formData.q_type === "FLOW_CHART") {
+    if (formData.q_type === "NOTE_COMPLETION") {
+      if (!noteTemplate.trim()) {
+        setError("Note shablonini kiriting")
+        return
+      }
+      const blankCount = countBlanks(noteTemplate)
+      if (blankCount === 0) {
+        setError("Note shablonida kamida bitta ____ bo'lishi kerak")
+        return
+      }
+      if (Object.keys(noteAnswers).length === 0) {
+        setError("Kamida bitta to'g'ri javobni kiriting")
+        return
+      }
+    } else if (formData.q_type === "FLOW_CHART") {
       if (Object.values(flowChartChoices).some((choice) => !choice.trim())) {
         setError("Barcha tanlov variantlarini to'ldiring")
         return
@@ -693,6 +761,9 @@ export function CreateListeningQuestionModal({
           formDataToSend.append("choices", JSON.stringify(flowChartChoices))
           formDataToSend.append("options", JSON.stringify(flowChartOptions))
           formDataToSend.append("correct_answers", JSON.stringify(flowChartAnswers))
+        } else if (formData.q_type === "NOTE_COMPLETION") {
+          formDataToSend.append("options", JSON.stringify(noteTemplate))
+          formDataToSend.append("correct_answers", JSON.stringify(noteAnswers))
         }
 
         if (editingQuestion && !copyingQuestion) {
@@ -708,7 +779,10 @@ export function CreateListeningQuestionModal({
           q_text: formData.q_text,
         }
 
-        if (formData.q_type === "MATCHING_INFORMATION") {
+        if (formData.q_type === "NOTE_COMPLETION") {
+          dataToSend.options = noteTemplate
+          dataToSend.correct_answers = noteAnswers
+        } else if (formData.q_type === "MATCHING_INFORMATION") {
           dataToSend.choices = matchingChoices
           dataToSend.rows = matchingRows
           dataToSend.answers = matchingAnswers
@@ -769,6 +843,8 @@ export function CreateListeningQuestionModal({
       setMapPositions({})
       setImagePreview("")
       setPhotoFile(null)
+      setNoteTemplate("")
+      setNoteAnswers({})
     } catch (error: any) {
       console.error("Failed to save listening question:", error)
       if (error.response?.data?.message) {
@@ -802,10 +878,11 @@ export function CreateListeningQuestionModal({
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
   const isFlowChart = formData.q_type === "FLOW_CHART"
+  const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
   const needsPhoto = ["MAP_LABELING"].includes(formData.q_type)
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onClose={onClose}>
       <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
@@ -849,6 +926,7 @@ export function CreateListeningQuestionModal({
                 <SelectItem value="MATCHING">MATCHING</SelectItem>
                 <SelectItem value="MAP_LABELING">MAP_LABELING</SelectItem>
                 <SelectItem value="FLOW_CHART">FLOW_CHART</SelectItem>
+                <SelectItem value="NOTE_COMPLETION">NOTE_COMPLETION</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1069,6 +1147,14 @@ export function CreateListeningQuestionModal({
                   Javob
                 </Button>
               </div>
+              <p className="text-xs text-slate-400 mb-2">
+                <span className="text-green-400 font-semibold">
+                  Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
+                </span>
+              </p>
+              <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30 mb-2">
+                <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
+              </p>
 
               <div className="space-y-2">
                 {correctAnswers.map((answer, index) => (
@@ -1077,7 +1163,7 @@ export function CreateListeningQuestionModal({
                       value={answer}
                       onChange={(e) => handleCorrectAnswerChange(index, e.target.value)}
                       className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                      placeholder={`To'g'ri javob ${index + 1}`}
+                      placeholder={`To'g'ri javob ${index + 1} (masalan: center / centre)`}
                       required
                     />
                     {correctAnswers.length > 1 && (
@@ -1440,7 +1526,13 @@ export function CreateListeningQuestionModal({
                   </Button>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Bo'sh joylarga to'ldirish uchun mumkin bo'lgan javoblar ro'yxati
+                  Bo'sh joylarga to'ldirish uchun mumkin bo'lgan javoblar ro'yxati.{" "}
+                  <span className="text-green-400 font-semibold">
+                    Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
+                  </span>
+                </p>
+                <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30">
+                  <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
                 </p>
                 <div className="space-y-2">
                   {flowChartOptions.map((option, index) => (
@@ -1450,7 +1542,7 @@ export function CreateListeningQuestionModal({
                         value={option}
                         onChange={(e) => handleFlowChartOptionChange(index, e.target.value)}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Variant ${index + 1} (masalan: fossils, contamination, site...)`}
+                        placeholder={`Variant ${index + 1} (masalan: fossils / fossil)`}
                         required
                       />
                       {flowChartOptions.length > 1 && (
@@ -1528,6 +1620,60 @@ export function CreateListeningQuestionModal({
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {isNoteCompletion && (
+            <div className="space-y-4">
+              {/* Note Template */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm font-semibold">Note Shabloni (HTML bilan) *</Label>
+                <p className="text-xs text-slate-400">
+                  HTML teglaridan foydalaning: &lt;b&gt;, &lt;br&gt;, va bo'sh joylar uchun ____ (4 ta pastki chiziq)
+                </p>
+                <Textarea
+                  value={noteTemplate}
+                  onChange={(e) => handleNoteTemplateChange(e.target.value)}
+                  className="bg-slate-700/50 border-slate-600 text-white font-mono resize-y min-h-[200px]"
+                  placeholder={`<b>Revision Note</b><br><br>• Problem with: the brochure sample<br>• Company name: ____ Hotel Chains<br>• Letters of the ____ should be bigger.`}
+                  required
+                />
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">Topilgan bo'sh joylar:</span>
+                  <span className="text-blue-400 font-bold">{countBlanks(noteTemplate)}</span>
+                </div>
+              </div>
+
+              {/* Correct Answers */}
+              {countBlanks(noteTemplate) > 0 && (
+                <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
+                  <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar *</Label>
+                  <p className="text-xs text-slate-400 mb-2">
+                    Har bir bo'sh joy uchun to'g'ri javobni kiriting.{" "}
+                    <span className="text-green-400 font-semibold">
+                      Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
+                    </span>
+                  </p>
+                  <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30">
+                    <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.keys(noteAnswers)
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((key) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-blue-400 font-mono text-sm font-bold w-8">{key}.</span>
+                          <Input
+                            value={noteAnswers[key]}
+                            onChange={(e) => handleNoteAnswerChange(key, e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                            placeholder={`Javob ${key} (masalan: center / centre)`}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
