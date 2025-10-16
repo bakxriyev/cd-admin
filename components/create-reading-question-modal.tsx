@@ -22,6 +22,7 @@ const QUESTION_TYPES = {
   SUMMARY_DRAG: "SUMMARY_DRAG",
   SENTENCE_ENDINGS: "SENTENCE_ENDINGS",
   MATCHING_HEADINGS: "MATCHING_HEADINGS",
+  NOTE_COMPLETION: "NOTE_COMPLETION",
 }
 
 interface CreateReadingQuestionModalProps {
@@ -61,6 +62,8 @@ export function CreateReadingQuestionModal({
   ])
   const [matchingHeadingsInputCount, setMatchingHeadingsInputCount] = useState(1)
   const [matchingHeadingsAnswers, setMatchingHeadingsAnswers] = useState<Record<string, string>>({})
+  const [noteTemplate, setNoteTemplate] = useState("")
+  const [noteAnswers, setNoteAnswers] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -125,6 +128,14 @@ export function CreateReadingQuestionModal({
         } else {
           setOptions([{ key: "A", text: "" }])
         }
+      } else if (questionToLoad.q_type === "NOTE_COMPLETION") {
+        // Load NOTE_COMPLETION data
+        setNoteTemplate(questionToLoad.options || "")
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setNoteAnswers(questionToLoad.correct_answers)
+        } else {
+          setNoteAnswers({})
+        }
       }
 
       if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
@@ -149,6 +160,8 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsOptions([{ key: "A", text: "" }])
       setMatchingHeadingsInputCount(1)
       setMatchingHeadingsAnswers({})
+      setNoteTemplate("")
+      setNoteAnswers({})
     }
   }, [editingQuestion, copyingQuestion, isOpen])
 
@@ -168,6 +181,20 @@ export function CreateReadingQuestionModal({
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
+    } else if (value === "NOTE_COMPLETION") {
+      setNoteTemplate("")
+      setNoteAnswers({})
+      setOptions([])
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+      setMatchingHeadingsOptions([{ key: "A", text: "" }])
+      setMatchingHeadingsInputCount(1)
+      setMatchingHeadingsAnswers({})
     } else if (value === "MATCHING_INFORMATION") {
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
@@ -465,13 +492,14 @@ export function CreateReadingQuestionModal({
       return
     }
 
-    if (formData.q_type === "MATCHING_HEADINGS") {
-      if (matchingHeadingsOptions.some((option) => !option.text.trim())) {
-        setError("Barcha optionlarni to'ldiring")
+    if (formData.q_type === "NOTE_COMPLETION") {
+      if (!noteTemplate.trim()) {
+        setError("Shablonni to'ldiring")
         return
       }
-      if (Object.keys(matchingHeadingsAnswers).length === 0) {
-        setError("Kamida bitta to'g'ri javobni belgilang")
+      const blankCount = (noteTemplate.match(/____/g) || []).length
+      if (blankCount === 0) {
+        setError("Kamida bitta ____ bo'sh joy qo'shish kerak")
         return
       }
     } else if (formData.q_type === "MATCHING_INFORMATION") {
@@ -522,9 +550,9 @@ export function CreateReadingQuestionModal({
         photo: formData.photo || undefined,
       }
 
-      if (formData.q_type === "MATCHING_HEADINGS") {
-        questionData.options = matchingHeadingsOptions
-        questionData.answers = matchingHeadingsAnswers
+      if (formData.q_type === "NOTE_COMPLETION") {
+        questionData.options = noteTemplate
+        questionData.correct_answers = noteAnswers
       } else if (formData.q_type === "MATCHING_INFORMATION") {
         questionData.choices = matchingChoices
         questionData.rows = matchingRows
@@ -564,6 +592,8 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsOptions([{ key: "A", text: "" }])
       setMatchingHeadingsInputCount(1)
       setMatchingHeadingsAnswers({})
+      setNoteTemplate("")
+      setNoteAnswers({})
     } catch (error: any) {
       console.error("Failed to save reading question:", error)
       setError("Savol saqlashda xatolik yuz berdi")
@@ -577,6 +607,8 @@ export function CreateReadingQuestionModal({
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
   const isMatchingHeadings = formData.q_type === "MATCHING_HEADINGS"
+  // Added isNoteCompletion flag
+  const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -629,7 +661,8 @@ export function CreateReadingQuestionModal({
                 <SelectItem value="SUMMARY_COMPLETION">SUMMARY_COMPLETION</SelectItem>
                 <SelectItem value="SUMMARY_DRAG">SUMMARY_DRAG</SelectItem>
                 <SelectItem value="SENTENCE_ENDINGS">SENTENCE_ENDINGS</SelectItem>
-                <SelectItem value="MATCHING_HEADINGS">MATCHING_HEADINGS</SelectItem>
+                {/* Add NOTE_COMPLETION to question type selector */}
+                <SelectItem value="NOTE_COMPLETION">NOTE_COMPLETION</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1173,6 +1206,54 @@ export function CreateReadingQuestionModal({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Add NOTE_COMPLETION UI section */}
+          {isNoteCompletion && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Shablonni Kiriting (HTML bilan) *</Label>
+                <Textarea
+                  value={noteTemplate}
+                  onChange={(e) => setNoteTemplate(e.target.value)}
+                  className="bg-slate-700/50 border-slate-600 text-white resize-y font-mono text-xs"
+                  placeholder="<b>Revision Note</b><br>• Problem with: ____<br>• Company name: ____"
+                  rows={4}
+                  required
+                />
+                <p className="text-xs text-slate-400">
+                  ____ (to'rt chiziq) bilan bo'sh joylarni belgilang. HTML taglardan foydalanishingiz mumkin: &lt;b&gt;,
+                  &lt;br&gt;, &lt;i&gt;, va boshqalar.
+                </p>
+              </div>
+
+              {/* Correct Answers for blanks */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Bo'sh Joylar uchun To'g'ri Javoblar</Label>
+                <div className="text-xs text-slate-400 mb-2">
+                  Shablonda nechta ____ bor, shunaqa ko'p javob kiritish kerak. Bir nechta javoblar uchun " / " bilan
+                  ajrating.
+                </div>
+                <div className="space-y-2">
+                  {Array.from({ length: (noteTemplate.match(/____/g) || []).length }, (_, i) => i + 1).map((num) => (
+                    <div key={num} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-16">Javob {num}:</span>
+                      <Input
+                        value={noteAnswers[num.toString()] || ""}
+                        onChange={(e) =>
+                          setNoteAnswers((prev) => ({
+                            ...prev,
+                            [num.toString()]: e.target.value,
+                          }))
+                        }
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder="Masalan: Sunrise yoki center / centre"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

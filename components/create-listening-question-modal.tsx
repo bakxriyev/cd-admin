@@ -21,13 +21,10 @@ const QUESTION_TYPES = {
   SUMMARY_COMPLETION: "SUMMARY_COMPLETION",
   SUMMARY_DRAG: "SUMMARY_DRAG",
   SENTENCE_ENDINGS: "SENTENCE_ENDINGS",
-  MATCHING_HEADINGS: "MATCHING_HEADINGS",
   SHORT_ANSWER: "SHORT_ANSWER",
-  MULTIPLE_CHOICE: "MULTIPLE_CHOICE",
-  MATCHING: "MATCHING",
-  MAP_LABELING: "MAP_LABELING",
   FLOW_CHART: "FLOW_CHART",
   NOTE_COMPLETION: "NOTE_COMPLETION",
+  MAP_LABELING: "MAP_LABELING",
 }
 
 interface CreateListeningQuestionModalProps {
@@ -76,6 +73,11 @@ export function CreateListeningQuestionModal({
   const [mapType2Choices, setMapType2Choices] = useState<Record<string, string>>({ "1": "" })
   const [mapType2Answers, setMapType2Answers] = useState<Record<string, string>>({})
   const [mapType2Options, setMapType2Options] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G", "H"])
+
+  const [tfngPhoto, setTfngPhoto] = useState<File | null>(null)
+  const [tfngChoices, setTfngChoices] = useState<Record<string, string>>({ "1": "" })
+  const [tfngOptions, setTfngOptions] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G", "H"])
+  const [tfngAnswers, setTfngAnswers] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const questionToLoad = editingQuestion || copyingQuestion
@@ -177,6 +179,24 @@ export function CreateListeningQuestionModal({
       } else {
         setCorrectAnswers([])
       }
+      // Load TFNG specific data
+      if (questionToLoad.q_type === "TFNG") {
+        if (questionToLoad.photo) {
+          // If photo is already uploaded, we can't get the file object here easily.
+          // The backend should provide a URL, or we rely on the existing photo if updating.
+          // For now, assume no photo object is passed directly for loading.
+          // If editing, the photo might be implicitly handled by the backend.
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setTfngChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setTfngOptions(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setTfngAnswers(questionToLoad.correct_answers as Record<string, string>)
+        }
+      }
     } else {
       setFormData({
         q_type: "MCQ_SINGLE",
@@ -202,6 +222,11 @@ export function CreateListeningQuestionModal({
       setMapType2Choices({ "1": "" })
       setMapType2Answers({})
       setMapType2Options(["A", "B", "C", "D", "E", "F", "G", "H"])
+      // Reset TFNG specific states
+      setTfngPhoto(null)
+      setTfngChoices({ "1": "" })
+      setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
+      setTfngAnswers({})
     }
     setPhotoFile(null)
   }, [editingQuestion, copyingQuestion, isOpen])
@@ -213,22 +238,14 @@ export function CreateListeningQuestionModal({
   const handleQuestionTypeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, q_type: value as ListeningQuestion["q_type"] }))
 
-    if (value === "NOTE_COMPLETION") {
+    if (value === "TFNG") {
+      setTfngPhoto(null)
+      setTfngChoices({ "1": "" })
+      setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
+      setTfngAnswers({})
+    } else if (value === "NOTE_COMPLETION") {
       setNoteTemplate("")
       setNoteAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setFlowChartChoices({ "1": "" })
-      setFlowChartOptions([""])
-      setFlowChartAnswers({})
-      setMapPositions({})
-      setImagePreview("")
     } else if (value === "FLOW_CHART") {
       setFlowChartChoices({ "1": "" })
       setFlowChartOptions([""])
@@ -312,6 +329,17 @@ export function CreateListeningQuestionModal({
         setImagePreview(reader.result as string)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleTfngPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setTfngPhoto(file)
+      // Optionally, you might want to preview this image too if it's displayed
+      // const reader = new FileReader()
+      // reader.onloadend = () => { setImagePreview(reader.result as string) } // Or a separate preview state for TFNG
+      // reader.readAsDataURL(file)
     }
   }
 
@@ -482,6 +510,61 @@ export function CreateListeningQuestionModal({
     const newAnswers = [...correctAnswers]
     newAnswers[index] = value
     setCorrectAnswers(newAnswers)
+  }
+
+  const handleAddTfngChoice = () => {
+    const nextNum = Math.max(...Object.keys(tfngChoices).map(Number), 0) + 1
+    setTfngChoices((prev) => ({ ...prev, [nextNum.toString()]: "" }))
+  }
+
+  const handleRemoveTfngChoice = (key: string) => {
+    if (Object.keys(tfngChoices).length > 1) {
+      const newChoices = { ...tfngChoices }
+      delete newChoices[key]
+      setTfngChoices(newChoices)
+
+      const newAnswers = { ...tfngAnswers }
+      delete newAnswers[key]
+      setTfngAnswers(newAnswers)
+    }
+  }
+
+  const handleTfngChoiceChange = (key: string, value: string) => {
+    setTfngChoices((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleAddTfngOption = () => {
+    const nextLetter = String.fromCharCode(65 + tfngOptions.length)
+    setTfngOptions((prev) => [...prev, nextLetter])
+  }
+
+  const handleRemoveTfngOption = (index: number) => {
+    if (tfngOptions.length > 1) {
+      const removedOption = tfngOptions[index]
+      const newOptions = tfngOptions.filter((_, i) => i !== index)
+      setTfngOptions(newOptions)
+
+      const newAnswers = { ...tfngAnswers }
+      Object.keys(newAnswers).forEach((key) => {
+        if (newAnswers[key] === removedOption) {
+          delete newAnswers[key]
+        }
+      })
+      setTfngAnswers(newAnswers)
+    }
+  }
+
+  const handleTfngOptionChange = (index: number, value: string) => {
+    const newOptions = [...tfngOptions]
+    newOptions[index] = value
+    setTfngOptions(newOptions)
+  }
+
+  const handleTfngAnswerChange = (choiceKey: string, optionLetter: string) => {
+    setTfngAnswers((prev) => ({
+      ...prev,
+      [choiceKey]: optionLetter,
+    }))
   }
 
   const handleAddMatchingChoice = () => {
@@ -727,23 +810,22 @@ export function CreateListeningQuestionModal({
     e.preventDefault()
     if (!listeningQuestionsId) return
 
-    if (!formData.q_text.trim()) {
-      setError("Savol matni majburiy")
-      return
-    }
-
-    if (formData.q_type === "NOTE_COMPLETION") {
+    if (formData.q_type === "TFNG") {
+      if (!tfngPhoto) {
+        setError("Rasm majburiy")
+        return
+      }
+      if (tfngOptions.some((opt) => !opt.trim())) {
+        setError("Barcha harflarni to'ldiring")
+        return
+      }
+      if (Object.values(tfngChoices).some((choice) => !choice.trim())) {
+        setError("Barcha tanlov variantlarini to'ldiring")
+        return
+      }
+    } else if (formData.q_type === "NOTE_COMPLETION") {
       if (!noteTemplate.trim()) {
-        setError("Note shablonini kiriting")
-        return
-      }
-      const blankCount = countBlanks(noteTemplate)
-      if (blankCount === 0) {
-        setError("Note shablonida kamida bitta ____ bo'lishi kerak")
-        return
-      }
-      if (Object.keys(noteAnswers).length === 0) {
-        setError("Kamida bitta to'g'ri javobni kiriting")
+        setError("Shablonni to'ldiring")
         return
       }
     } else if (formData.q_type === "FLOW_CHART") {
@@ -834,126 +916,145 @@ export function CreateListeningQuestionModal({
     setError("")
 
     try {
-      const hasPhoto = photoFile !== null
+      const questionData: any = {
+        listening_questions_id: Number.parseInt(listeningQuestionsId),
+        q_type: formData.q_type,
+      }
 
-      if (hasPhoto) {
-        // Create FormData for multipart/form-data upload
-        const formDataToSend = new FormData()
+      if (formData.q_type !== "NOTE_COMPLETION") {
+        if (!formData.q_text.trim()) {
+          setError("Savol matni majburiy")
+          setLoading(false)
+          return
+        }
+        questionData.q_text = formData.q_text
+      }
 
-        // Add basic fields
-        formDataToSend.append("listening_questions_id", listeningQuestionsId)
-        formDataToSend.append("q_type", formData.q_type)
-        formDataToSend.append("q_text", formData.q_text)
+      if (formData.q_type === "TFNG") {
+        const formDataWithFile = new FormData()
+        formDataWithFile.append("listening_questions_id", listeningQuestionsId)
+        formDataWithFile.append("q_type", "TFNG")
+        // TFNG requires q_text
+        if (!formData.q_text.trim()) {
+          setError("Savol matni majburiy")
+          setLoading(false)
+          return
+        }
+        formDataWithFile.append("q_text", formData.q_text)
+        formDataWithFile.append("photo", tfngPhoto!)
+        formDataWithFile.append("choices", JSON.stringify(tfngChoices))
+        formDataWithFile.append("options", JSON.stringify(tfngOptions))
+        formDataWithFile.append("correct_answers", JSON.stringify(tfngAnswers))
 
-        // Add photo file
-        if (photoFile) {
-          formDataToSend.append("photo", photoFile)
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), formDataWithFile)
+        } else {
+          await api.lQuestions.create(formDataWithFile)
+        }
+      } else if (formData.q_type === "NOTE_COMPLETION") {
+        questionData.options = noteTemplate
+        questionData.correct_answers = noteAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (formData.q_type === "MATCHING_INFORMATION") {
+        questionData.choices = matchingChoices
+        questionData.rows = matchingRows
+        questionData.answers = matchingAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (formData.q_type === "TABLE_COMPLETION") {
+        questionData.columns = columns
+        questionData.rows = rows
+        questionData.choices = choices
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (formData.q_type === "MAP_LABELING") {
+        if (!photoFile && !editingQuestion && !copyingQuestion) {
+          setError("MAP_LABELING turi uchun rasm majburiy")
+          setLoading(false)
+          return
         }
 
-        // Add type-specific fields as JSON strings
-        if (formData.q_type === "MATCHING_INFORMATION") {
-          formDataToSend.append("choices", JSON.stringify(matchingChoices))
-          formDataToSend.append("rows", JSON.stringify(matchingRows))
-          formDataToSend.append("answers", JSON.stringify(matchingAnswers))
-        } else if (formData.q_type === "TABLE_COMPLETION") {
-          formDataToSend.append("columns", JSON.stringify(columns))
-          formDataToSend.append("rows", JSON.stringify(rows))
-          formDataToSend.append("choices", JSON.stringify(choices))
-        } else if (formData.q_type === "MAP_LABELING") {
-          if (mapType === "type2") {
-            formDataToSend.append("choices", JSON.stringify(mapType2Choices))
-            formDataToSend.append("options", JSON.stringify(mapType2Options))
-            formDataToSend.append("correct_answers", JSON.stringify(mapType2Answers))
-          } else {
-            formDataToSend.append("rows", JSON.stringify(mapPositions))
-            formDataToSend.append("options", JSON.stringify(options))
-            formDataToSend.append("answers", JSON.stringify(correctAnswers))
-          }
-        } else if (
-          [
-            "MCQ_SINGLE",
-            "MCQ_MULTI",
-            "MATCHING",
-            "TFNG",
-            "SUMMARY_DRAG",
-            "SENTENCE_ENDINGS",
-            "MATCHING_HEADINGS",
-            "MULTIPLE_CHOICE",
-          ].includes(formData.q_type)
-        ) {
-          formDataToSend.append("options", JSON.stringify(options))
-          formDataToSend.append("correct_answers", JSON.stringify(correctAnswers))
-        } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)) {
-          formDataToSend.append("correct_answers", JSON.stringify(correctAnswers))
-        } else if (formData.q_type === "FLOW_CHART") {
-          formDataToSend.append("choices", JSON.stringify(flowChartChoices))
-          formDataToSend.append("options", JSON.stringify(flowChartOptions))
-          formDataToSend.append("correct_answers", JSON.stringify(flowChartAnswers))
-        } else if (formData.q_type === "NOTE_COMPLETION") {
-          formDataToSend.append("options", JSON.stringify(noteTemplate))
-          formDataToSend.append("correct_answers", JSON.stringify(noteAnswers))
+        const formDataWithFile = new FormData()
+        formDataWithFile.append("listening_questions_id", listeningQuestionsId)
+        formDataWithFile.append("q_type", formData.q_type)
+        formDataWithFile.append("q_text", formData.q_text)
+        if (photoFile) {
+          formDataWithFile.append("photo", photoFile)
+        }
+
+        if (mapType === "type2") {
+          formDataWithFile.append("choices", JSON.stringify(mapType2Choices))
+          formDataWithFile.append("options", JSON.stringify(mapType2Options))
+          formDataWithFile.append("correct_answers", JSON.stringify(mapType2Answers))
+        } else {
+          formDataWithFile.append("rows", JSON.stringify(mapPositions))
+          formDataWithFile.append("options", JSON.stringify(options))
+          formDataWithFile.append("answers", JSON.stringify(correctAnswers))
         }
 
         if (editingQuestion && !copyingQuestion) {
-          await api.lQuestions.update(editingQuestion.id.toString(), formDataToSend)
+          await api.lQuestions.update(editingQuestion.id.toString(), formDataWithFile)
         } else {
-          await api.lQuestions.create(formDataToSend)
+          await api.lQuestions.create(formDataWithFile)
+        }
+      } else if (
+        [
+          "MCQ_SINGLE",
+          "MCQ_MULTI",
+          "MATCHING",
+          "TFNG",
+          "SUMMARY_DRAG",
+          "SENTENCE_ENDINGS",
+          "MATCHING_HEADINGS",
+          "MULTIPLE_CHOICE",
+        ].includes(formData.q_type)
+      ) {
+        questionData.options = options
+        questionData.correct_answers = correctAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)) {
+        questionData.correct_answers = correctAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (formData.q_type === "FLOW_CHART") {
+        questionData.choices = flowChartChoices
+        questionData.options = flowChartOptions
+        questionData.correct_answers = flowChartAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
         }
       } else {
-        // Use JSON for non-photo questions
-        const dataToSend: any = {
-          listening_questions_id: Number(listeningQuestionsId),
-          q_type: formData.q_type,
-          q_text: formData.q_text,
-        }
-
-        if (formData.q_type === "NOTE_COMPLETION") {
-          dataToSend.options = noteTemplate
-          dataToSend.correct_answers = noteAnswers
-        } else if (formData.q_type === "MATCHING_INFORMATION") {
-          dataToSend.choices = matchingChoices
-          dataToSend.rows = matchingRows
-          dataToSend.answers = matchingAnswers
-        } else if (formData.q_type === "TABLE_COMPLETION") {
-          dataToSend.columns = columns
-          dataToSend.rows = rows
-          dataToSend.choices = choices
-        } else if (formData.q_type === "MAP_LABELING") {
-          if (mapType === "type2") {
-            dataToSend.choices = mapType2Choices
-            dataToSend.options = mapType2Options
-            dataToSend.correct_answers = mapType2Answers
-          } else {
-            dataToSend.rows = mapPositions
-            dataToSend.options = options
-            dataToSend.answers = correctAnswers
-          }
-        } else if (
-          [
-            "MCQ_SINGLE",
-            "MCQ_MULTI",
-            "MATCHING",
-            "TFNG",
-            "SUMMARY_DRAG",
-            "SENTENCE_ENDINGS",
-            "MATCHING_HEADINGS",
-            "MULTIPLE_CHOICE",
-          ].includes(formData.q_type)
-        ) {
-          dataToSend.options = options
-          dataToSend.correct_answers = correctAnswers
-        } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(formData.q_type)) {
-          dataToSend.correct_answers = correctAnswers
-        } else if (formData.q_type === "FLOW_CHART") {
-          dataToSend.choices = flowChartChoices
-          dataToSend.options = flowChartOptions
-          dataToSend.correct_answers = flowChartAnswers
-        }
-
+        // Default case for other types, assuming they might use JSON payload
+        // This part might need refinement based on specific type requirements
         if (editingQuestion && !copyingQuestion) {
-          await api.lQuestions.update(editingQuestion.id.toString(), dataToSend)
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
         } else {
-          await api.lQuestions.create(dataToSend)
+          await api.lQuestions.create(questionData)
         }
       }
 
@@ -984,6 +1085,11 @@ export function CreateListeningQuestionModal({
       setMapType2Choices({ "1": "" })
       setMapType2Answers({})
       setMapType2Options(["A", "B", "C", "D", "E", "F", "G", "H"])
+      // Reset TFNG specific states
+      setTfngPhoto(null)
+      setTfngChoices({ "1": "" })
+      setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
+      setTfngAnswers({})
     } catch (error: any) {
       console.error("Failed to save listening question:", error)
       if (error.response?.data?.message) {
@@ -1018,19 +1124,24 @@ export function CreateListeningQuestionModal({
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
   const isFlowChart = formData.q_type === "FLOW_CHART"
   const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
-  const needsPhoto = ["MAP_LABELING"].includes(formData.q_type)
+  const needsPhoto = ["MAP_LABELING", "TFNG"].includes(formData.q_type) // TFNG also needs photo
 
   return (
-    <Dialog open={isOpen} onClose={onClose}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <Headphones className="w-5 h-5 text-green-400" />
-            {editingQuestion
-              ? "Listening Savolini Tahrirlash"
-              : copyingQuestion
-                ? "Listening Savolini Nusxalash"
-                : "Listening Savoli Qo'shish"}
+          <DialogTitle className="text-white flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Headphones className="w-5 h-5 text-green-400" />
+              {editingQuestion
+                ? "Listening Savolini Tahrirlash"
+                : copyingQuestion
+                  ? "Listening Savolini Nusxalash"
+                  : "Listening Savoli Qo'shish"}
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors" type="button">
+              ✕
+            </button>
           </DialogTitle>
         </DialogHeader>
 
@@ -1059,36 +1170,36 @@ export function CreateListeningQuestionModal({
                 <SelectItem value="SUMMARY_COMPLETION">SUMMARY_COMPLETION</SelectItem>
                 <SelectItem value="SUMMARY_DRAG">SUMMARY_DRAG</SelectItem>
                 <SelectItem value="SENTENCE_ENDINGS">SENTENCE_ENDINGS</SelectItem>
-                <SelectItem value="MATCHING_HEADINGS">MATCHING_HEADINGS</SelectItem>
                 <SelectItem value="SHORT_ANSWER">SHORT_ANSWER</SelectItem>
-                <SelectItem value="MULTIPLE_CHOICE">MULTIPLE_CHOICE</SelectItem>
-                <SelectItem value="MATCHING">MATCHING</SelectItem>
-                <SelectItem value="MAP_LABELING">MAP_LABELING</SelectItem>
                 <SelectItem value="FLOW_CHART">FLOW_CHART</SelectItem>
                 <SelectItem value="NOTE_COMPLETION">NOTE_COMPLETION</SelectItem>
+                <SelectItem value="MAP_LABELING">MAP_LABELING</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="q_text" className="text-slate-300 text-sm">
-              Savol Matni *
-            </Label>
-            <Textarea
-              id="q_text"
-              value={formData.q_text}
-              onChange={(e) => handleInputChange("q_text", e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white resize-y"
-              placeholder="What is the speaker's main point? (MAP turi uchun ___ belgilarini ishlating)"
-              rows={2}
-              required
-            />
-            {formData.q_type === "MAP_LABELING" && (
-              <p className="text-xs text-slate-400">
-                MAP savollari uchun: Matnda ___ belgilarini qo'ying, ular frontendda input maydonlari bo'lib ko'rinadi
-              </p>
-            )}
-          </div>
+          {/* Conditionally render q_text based on q_type */}
+          {formData.q_type !== "NOTE_COMPLETION" && (
+            <div className="space-y-2">
+              <Label htmlFor="q_text" className="text-slate-300 text-sm">
+                Savol Matni *
+              </Label>
+              <Textarea
+                id="q_text"
+                value={formData.q_text}
+                onChange={(e) => handleInputChange("q_text", e.target.value)}
+                className="bg-slate-700/50 border-slate-600 text-white resize-y"
+                placeholder="What is the speaker's main point? (MAP turi uchun ___ belgilarini ishlating)"
+                rows={2}
+                required
+              />
+              {formData.q_type === "MAP_LABELING" && (
+                <p className="text-xs text-slate-400">
+                  MAP savollari uchun: Matnda ___ belgilarini qo'ying, ular frontendda input maydonlari bo'lib ko'rinadi
+                </p>
+              )}
+            </div>
+          )}
 
           {formData.q_type === "MAP_LABELING" && (
             <div className="space-y-2 bg-blue-900/20 p-3 rounded-lg border border-blue-700/30">
@@ -1129,27 +1240,39 @@ export function CreateListeningQuestionModal({
 
           {needsPhoto && (
             <div className="space-y-2">
-              <Label className="text-slate-300 text-sm">Rasm (Map uchun majburiy) *</Label>
+              <Label className="text-slate-300 text-sm">
+                {formData.q_type === "MAP_LABELING" ? "Rasm (Map uchun majburiy)" : "Rasm (TFNG uchun majburiy)"} *
+              </Label>
               <div className="border-2 border-dashed border-slate-600 rounded-lg p-3">
-                {photoFile || imagePreview ? (
+                {/* Conditionally render based on mapType or tfngPhoto */}
+                {(formData.q_type === "MAP_LABELING" && (photoFile || imagePreview)) ||
+                (formData.q_type === "TFNG" && tfngPhoto) ? (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-300 truncate">{photoFile?.name || "Mavjud rasm"}</span>
+                      <span className="text-sm text-slate-300 truncate">
+                        {formData.q_type === "MAP_LABELING" ? photoFile?.name || "Mavjud rasm" : tfngPhoto?.name}
+                      </span>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setPhotoFile(null)
-                          setImagePreview("")
-                          setMapPositions({})
+                          if (formData.q_type === "MAP_LABELING") {
+                            setPhotoFile(null)
+                            setImagePreview("")
+                            setMapPositions({})
+                          } else if (formData.q_type === "TFNG") {
+                            setTfngPhoto(null)
+                            // Clear related TFNG states if needed
+                          }
                         }}
                         className="text-red-400 hover:text-red-300 flex-shrink-0"
                       >
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
-                    {imagePreview && (
+                    {/* Image Preview for Map Labeling Type 1 */}
+                    {formData.q_type === "MAP_LABELING" && mapType === "type1" && imagePreview && (
                       <div className="space-y-2">
                         <p className="text-xs text-slate-400">Rasmda drag qo'yish joylarini belgilash uchun bosing:</p>
                         <div className="relative inline-block border border-slate-600 rounded-lg overflow-hidden">
@@ -1180,9 +1303,18 @@ export function CreateListeningQuestionModal({
                 ) : (
                   <label className="flex flex-col items-center cursor-pointer">
                     <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                    <span className="text-xs text-slate-400 text-center">Map rasmi yuklash uchun bosing</span>
+                    <span className="text-xs text-slate-400 text-center">
+                      {formData.q_type === "MAP_LABELING"
+                        ? "Map rasmi yuklash uchun bosing"
+                        : "TFNG uchun rasm yuklash uchun bosing"}
+                    </span>
                     <span className="text-xs text-slate-500 mt-1">PNG, JPG, JPEG, WEBP</span>
-                    <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={formData.q_type === "MAP_LABELING" ? handlePhotoChange : handleTfngPhotoChange}
+                      className="hidden"
+                    />
                   </label>
                 )}
               </div>
@@ -1332,24 +1464,12 @@ export function CreateListeningQuestionModal({
             </>
           )}
 
-          {needsOptions && formData.q_type !== "MAP_LABELING" && (
+          {/* Conditionally render options based on q_type */}
+          {(needsOptions || formData.q_type === "MAP_LABELING") && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-slate-300 text-sm">
-                  {formData.q_type === "MAP_LABELING" ? "Tanlov Variantlari (A, B, C, D...) *" : "Javob Variantlari *"}
-                </Label>
-                <Button
-                  type="button"
-                  onClick={handleAddOption}
-                  variant="outline"
-                  size="sm"
-                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Variant
-                </Button>
-              </div>
-
+              <Label className="text-slate-300 text-sm">
+                {formData.q_type === "MAP_LABELING" ? "Tanlov Variantlari (A, B, C, D...) *" : "Javob Variantlari *"}
+              </Label>
               <div className="space-y-2">
                 {options.map((option, index) => (
                   <div key={index} className="flex items-center gap-2">
@@ -1420,6 +1540,18 @@ export function CreateListeningQuestionModal({
                   </div>
                 ))}
               </div>
+              {formData.q_type !== "MAP_LABELING" && (
+                <Button
+                  type="button"
+                  onClick={handleAddOption}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs mt-2"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Variant
+                </Button>
+              )}
               {formData.q_type === "MAP_LABELING" && (
                 <p className="text-xs text-slate-400">Har bir tanlov uchun qaysi pozitsiyaga mos kelishini tanlang</p>
               )}
@@ -1987,11 +2119,12 @@ export function CreateListeningQuestionModal({
             </div>
           )}
 
+          {/* Update NOTE_COMPLETION UI (remove q_text requirement) */}
           {isNoteCompletion && (
             <div className="space-y-4">
               {/* Note Template */}
               <div className="space-y-2">
-                <Label className="text-slate-300 text-sm font-semibold">Note Shabloni (HTML bilan) *</Label>
+                <Label className="text-slate-300 text-sm font-semibold">Shablonni Kiriting (HTML bilan) *</Label>
                 <p className="text-xs text-slate-400">
                   HTML teglaridan foydalaning: &lt;b&gt;, &lt;br&gt;, va bo'sh joylar uchun ____ (4 ta pastki chiziq)
                 </p>
@@ -2008,7 +2141,7 @@ export function CreateListeningQuestionModal({
                 </div>
               </div>
 
-              {/* Correct Answers */}
+              {/* Correct Answers for blanks */}
               {countBlanks(noteTemplate) > 0 && (
                 <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
                   <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar *</Label>
@@ -2038,6 +2171,124 @@ export function CreateListeningQuestionModal({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Add TFNG UI section in the form */}
+          {formData.q_type === "TFNG" && (
+            <div className="space-y-4">
+              {/* Photo Upload is handled above by needsPhoto */}
+
+              {/* Choices */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Tanlov Variantlari *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddTfngChoice}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(tfngChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 font-mono text-sm w-8">{key}.</span>
+                      <Input
+                        value={value}
+                        onChange={(e) => handleTfngChoiceChange(key, e.target.value)}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${key}`}
+                        required
+                      />
+                      {Object.keys(tfngChoices).length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveTfngChoice(key)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Options (Letters) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Harflar (A, B, C...) *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddTfngOption}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Harf
+                  </Button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {tfngOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-1">
+                      <Input
+                        value={option}
+                        onChange={(e) => handleTfngOptionChange(index, e.target.value)}
+                        className="bg-slate-700/50 border-slate-600 text-white text-center font-bold"
+                        maxLength={1}
+                        required
+                      />
+                      {tfngOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => handleRemoveTfngOption(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300 p-0 h-6 w-6"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Correct Answers */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">To'g'ri Javoblarni Belgilang</Label>
+                <div className="space-y-2">
+                  {Object.entries(tfngChoices).map(([choiceKey, choiceText]) => (
+                    <div key={choiceKey} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-24">Variant {choiceKey}:</span>
+                      <Select
+                        value={tfngAnswers[choiceKey] || ""}
+                        onValueChange={(value) => handleTfngAnswerChange(choiceKey, value)}
+                      >
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Harf tanlang" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {tfngOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {tfngAnswers[choiceKey] && <span className="text-green-400 text-sm font-bold w-8">✓</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

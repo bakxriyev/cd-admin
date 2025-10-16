@@ -160,11 +160,13 @@ export default function ListeningDetailPage() {
 
   const handleAudioUpdate = async (formData: FormData) => {
     try {
-      await api.listening.update(listeningId, formData)
+      const response = await api.listening.update(listeningId, formData)
+      console.log("[v0] Audio updated successfully:", response)
       setShowAudioUpdateModal(false)
       fetchListeningData()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to update audio:", error)
+      setAudioError(`Audio yangilashda xatolik: ${error.message}`)
     }
   }
 
@@ -176,11 +178,14 @@ export default function ListeningDetailPage() {
       formData.append("title", listening?.title || "")
       formData.append("description", listening?.description || "")
       formData.append("exam_id", examId)
+      // Remove audio_file by not including it
 
-      await api.listening.update(listeningId, formData)
+      const response = await api.listening.update(listeningId, formData)
+      console.log("[v0] Audio deleted successfully:", response)
       fetchListeningData()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to delete audio:", error)
+      setAudioError(`Audio o'chirishda xatolik: ${error.message}`)
     }
   }
 
@@ -190,7 +195,7 @@ export default function ListeningDetailPage() {
     const audioFile = listening.audio_file || listening.audio_url || listening.audioFile || listening.audioUrl
     if (!audioFile) return ""
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://backend.realexamielts.uz"
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL 
     const audioUrl = `${baseUrl}${audioFile}`
 
     console.log("[v0] Constructed audio URL:", audioUrl)

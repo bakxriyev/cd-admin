@@ -6,7 +6,6 @@ import type React from "react"
 import { useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
@@ -30,7 +29,6 @@ export function CreateListeningSectionModal({
 }: CreateListeningSectionModalProps) {
   const [formData, setFormData] = useState({
     part: "",
-    title: "",
     instruction: "",
   })
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -41,13 +39,11 @@ export function CreateListeningSectionModal({
     if (editingSection) {
       setFormData({
         part: editingSection.part || "",
-        title: editingSection.title || "",
         instruction: editingSection.instruction || "",
       })
     } else {
       setFormData({
         part: "",
-        title: "",
         instruction: "",
       })
     }
@@ -82,10 +78,6 @@ export function CreateListeningSectionModal({
       sectionData.append("part", formData.part)
       sectionData.append("listening_id", listeningId)
 
-      if (formData.title.trim()) {
-        sectionData.append("title", formData.title)
-      }
-
       if (formData.instruction.trim()) {
         sectionData.append("instruction", formData.instruction)
       }
@@ -105,7 +97,6 @@ export function CreateListeningSectionModal({
       // Reset form
       setFormData({
         part: "",
-        title: "",
         instruction: "",
       })
       setPhotoFile(null)
@@ -149,19 +140,6 @@ export function CreateListeningSectionModal({
                 <SelectItem value="PART4">PART4</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-slate-300 text-sm">
-              Sarlavha (ixtiyoriy)
-            </Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => handleInputChange("title", e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white"
-              placeholder="Section title"
-            />
           </div>
 
           <div className="space-y-2">
