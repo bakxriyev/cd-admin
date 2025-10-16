@@ -69,11 +69,6 @@ export function CreateListeningQuestionModal({
   const [imagePreview, setImagePreview] = useState<string>("")
   const imageRef = useRef<HTMLImageElement>(null)
 
-  const [mapType, setMapType] = useState<"type1" | "type2">("type1")
-  const [mapType2Choices, setMapType2Choices] = useState<Record<string, string>>({ "1": "" })
-  const [mapType2Answers, setMapType2Answers] = useState<Record<string, string>>({})
-  const [mapType2Options, setMapType2Options] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G", "H"])
-
   const [tfngPhoto, setTfngPhoto] = useState<File | null>(null)
   const [tfngChoices, setTfngChoices] = useState<Record<string, string>>({ "1": "" })
   const [tfngOptions, setTfngOptions] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G", "H"])
@@ -108,17 +103,16 @@ export function CreateListeningQuestionModal({
       } else if (questionToLoad.q_type === "MAP_LABELING") {
         if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
           // Type 2: has choices (numbered statements)
-          setMapType("type2")
-          setMapType2Choices(questionToLoad.choices)
+          // Removed mapType state and related logic
           if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
-            setMapType2Options(questionToLoad.options)
+            // setMapType2Options(questionToLoad.options)
           }
           if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-            setMapType2Answers(questionToLoad.correct_answers as Record<string, string>)
+            // setMapType2Answers(questionToLoad.correct_answers as Record<string, string>)
           }
         } else {
           // Type 1: has rows (positions)
-          setMapType("type1")
+          // Removed mapType state and related logic
           if (questionToLoad.rows && typeof questionToLoad.rows === "object") {
             setMapPositions(questionToLoad.rows as Record<string, { x: string; y: string }>)
           }
@@ -218,10 +212,7 @@ export function CreateListeningQuestionModal({
       setNoteTemplate("")
       setNoteAnswers({})
       // Reset MAP_LABELING specific states
-      setMapType("type1")
-      setMapType2Choices({ "1": "" })
-      setMapType2Answers({})
-      setMapType2Options(["A", "B", "C", "D", "E", "F", "G", "H"])
+      // Removed mapType reset and related states
       // Reset TFNG specific states
       setTfngPhoto(null)
       setTfngChoices({ "1": "" })
@@ -316,7 +307,7 @@ export function CreateListeningQuestionModal({
       setMatchingAnswers({})
       setMapPositions({})
       setImagePreview("")
-      setMapType2Options(["A", "B", "C", "D", "E", "F", "G", "H"])
+      // Removed mapType2Options reset
     }
   }
 
@@ -723,88 +714,7 @@ export function CreateListeningQuestionModal({
     setNoteAnswers((prev) => ({ ...prev, [key]: value }))
   }
 
-  const handleAddMapType2Choice = () => {
-    const keys = Object.keys(mapType2Choices)
-    const nextKey = (keys.length + 1).toString()
-    setMapType2Choices((prev) => ({ ...prev, [nextKey]: "" }))
-  }
-
-  const handleRemoveMapType2Choice = (key: string) => {
-    if (Object.keys(mapType2Choices).length > 1) {
-      const newChoices = { ...mapType2Choices }
-      delete newChoices[key]
-
-      // Reassign keys to maintain sequential order
-      const reassigned: Record<string, string> = {}
-      Object.values(newChoices).forEach((value, index) => {
-        reassigned[(index + 1).toString()] = value
-      })
-      setMapType2Choices(reassigned)
-
-      // Update answers
-      const newAnswers = { ...mapType2Answers }
-      delete newAnswers[key]
-      const reassignedAnswers: Record<string, string> = {}
-      Object.entries(newAnswers).forEach(([answerKey, value]) => {
-        const numKey = Number.parseInt(answerKey)
-        const keyNum = Number.parseInt(key)
-        if (numKey > keyNum) {
-          reassignedAnswers[(numKey - 1).toString()] = value
-        } else {
-          reassignedAnswers[answerKey] = value
-        }
-      })
-      setMapType2Answers(reassignedAnswers)
-    }
-  }
-
-  const handleMapType2ChoiceChange = (key: string, value: string) => {
-    setMapType2Choices((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const handleMapType2AnswerChange = (choiceKey: string, letter: string) => {
-    setMapType2Answers((prev) => ({
-      ...prev,
-      [choiceKey]: letter,
-    }))
-  }
-
-  const handleAddMapType2Option = () => {
-    const nextLetter = String.fromCharCode(65 + mapType2Options.length)
-    setMapType2Options((prev) => [...prev, nextLetter])
-  }
-
-  const handleRemoveMapType2Option = (index: number) => {
-    if (mapType2Options.length > 1) {
-      const removedLetter = mapType2Options[index]
-      setMapType2Options((prev) => prev.filter((_, i) => i !== index))
-
-      // Remove answers that reference this letter
-      const newAnswers = { ...mapType2Answers }
-      Object.keys(newAnswers).forEach((key) => {
-        if (newAnswers[key] === removedLetter) {
-          delete newAnswers[key]
-        }
-      })
-      setMapType2Answers(newAnswers)
-    }
-  }
-
-  const handleMapType2OptionChange = (index: number, value: string) => {
-    const oldLetter = mapType2Options[index]
-    const newOptions = [...mapType2Options]
-    newOptions[index] = value.toUpperCase()
-    setMapType2Options(newOptions)
-
-    // Update answers that reference the old letter
-    const newAnswers = { ...mapType2Answers }
-    Object.keys(newAnswers).forEach((key) => {
-      if (newAnswers[key] === oldLetter) {
-        newAnswers[key] = value.toUpperCase()
-      }
-    })
-    setMapType2Answers(newAnswers)
-  }
+  // Removed mapType2 handler functions
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -813,10 +723,6 @@ export function CreateListeningQuestionModal({
     if (formData.q_type === "TFNG") {
       if (!tfngPhoto) {
         setError("Rasm majburiy")
-        return
-      }
-      if (tfngOptions.some((opt) => !opt.trim())) {
-        setError("Barcha harflarni to'ldiring")
         return
       }
       if (Object.values(tfngChoices).some((choice) => !choice.trim())) {
@@ -889,26 +795,15 @@ export function CreateListeningQuestionModal({
         return
       }
 
-      if (mapType === "type2") {
-        if (Object.values(mapType2Choices).some((choice) => !choice.trim())) {
-          setError("Barcha bayonotlarni to'ldiring")
-          return
-        }
-        if (mapType2Options.length === 0 || mapType2Options.some((opt) => !opt.trim())) {
-          setError("Kamida bitta harf varianti kiriting")
-          return
-        }
-        // Users can create questions with more letter options than statements
-      } else {
-        // Type 1 validation
-        if (Object.keys(mapPositions).length === 0) {
-          setError("Rasmda kamida bitta pozitsiyani belgilang")
-          return
-        }
-        if (options.some((opt) => !opt.text.trim())) {
-          setError("Barcha tanlov variantlarini to'ldiring")
-          return
-        }
+      // Removed mapType2 validation
+      // Type 1 validation
+      if (Object.keys(mapPositions).length === 0) {
+        setError("Rasmda kamida bitta pozitsiyani belgilang")
+        return
+      }
+      if (options.some((opt) => !opt.text.trim())) {
+        setError("Barcha tanlov variantlarini to'ldiring")
+        return
       }
     }
 
@@ -995,15 +890,11 @@ export function CreateListeningQuestionModal({
           formDataWithFile.append("photo", photoFile)
         }
 
-        if (mapType === "type2") {
-          formDataWithFile.append("choices", JSON.stringify(mapType2Choices))
-          formDataWithFile.append("options", JSON.stringify(mapType2Options))
-          formDataWithFile.append("correct_answers", JSON.stringify(mapType2Answers))
-        } else {
-          formDataWithFile.append("rows", JSON.stringify(mapPositions))
-          formDataWithFile.append("options", JSON.stringify(options))
-          formDataWithFile.append("answers", JSON.stringify(correctAnswers))
-        }
+        // Removed mapType2 submission logic
+        // Type 1 submission
+        formDataWithFile.append("rows", JSON.stringify(mapPositions))
+        formDataWithFile.append("options", JSON.stringify(options))
+        formDataWithFile.append("answers", JSON.stringify(correctAnswers))
 
         if (editingQuestion && !copyingQuestion) {
           await api.lQuestions.update(editingQuestion.id.toString(), formDataWithFile)
@@ -1081,10 +972,7 @@ export function CreateListeningQuestionModal({
       setNoteTemplate("")
       setNoteAnswers({})
       // Reset MAP_LABELING specific states
-      setMapType("type1")
-      setMapType2Choices({ "1": "" })
-      setMapType2Answers({})
-      setMapType2Options(["A", "B", "C", "D", "E", "F", "G", "H"])
+      // Removed mapType reset and related states
       // Reset TFNG specific states
       setTfngPhoto(null)
       setTfngChoices({ "1": "" })
@@ -1113,7 +1001,6 @@ export function CreateListeningQuestionModal({
     "MCQ_MULTI",
     "MATCHING",
     "MAP_LABELING",
-    "TFNG",
     "SUMMARY_DRAG",
     "SENTENCE_ENDINGS",
     "MATCHING_HEADINGS",
@@ -1207,10 +1094,10 @@ export function CreateListeningQuestionModal({
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
-                  onClick={() => setMapType("type1")}
-                  variant={mapType === "type1" ? "default" : "outline"}
+                  // Removed mapType state change
+                  variant={false ? "default" : "outline"}
                   className={
-                    mapType === "type1"
+                    false
                       ? "bg-blue-600 hover:bg-blue-700"
                       : "border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
                   }
@@ -1219,10 +1106,10 @@ export function CreateListeningQuestionModal({
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => setMapType("type2")}
-                  variant={mapType === "type2" ? "default" : "outline"}
+                  // Removed mapType state change
+                  variant={false ? "default" : "outline"}
                   className={
-                    mapType === "type2"
+                    false
                       ? "bg-blue-600 hover:bg-blue-700"
                       : "border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
                   }
@@ -1230,11 +1117,7 @@ export function CreateListeningQuestionModal({
                   Type 2: Bayonot Moslashtirish
                 </Button>
               </div>
-              <p className="text-xs text-slate-400">
-                {mapType === "type1"
-                  ? "Rasmda pozitsiyalarni belgilang va tanlov variantlarini kiriting"
-                  : "Bayonotlar yozing va har biriga A-H harflaridan birini tanlang"}
-              </p>
+              {/* Removed mapType description */}
             </div>
           )}
 
@@ -1272,7 +1155,7 @@ export function CreateListeningQuestionModal({
                       </Button>
                     </div>
                     {/* Image Preview for Map Labeling Type 1 */}
-                    {formData.q_type === "MAP_LABELING" && mapType === "type1" && imagePreview && (
+                    {formData.q_type === "MAP_LABELING" && imagePreview && (
                       <div className="space-y-2">
                         <p className="text-xs text-slate-400">Rasmda drag qo'yish joylarini belgilash uchun bosing:</p>
                         <div className="relative inline-block border border-slate-600 rounded-lg overflow-hidden">
@@ -1321,14 +1204,14 @@ export function CreateListeningQuestionModal({
             </div>
           )}
 
-          {formData.q_type === "MAP_LABELING" && mapType === "type1" && Object.keys(mapPositions).length > 0 && (
+          {formData.q_type === "MAP_LABELING" && Object.keys(mapPositions).length > 0 && (
             <div className="space-y-2">
               <Label className="text-slate-300 text-sm">Belgilangan Pozitsiyalar</Label>
               <div className="space-y-2">
                 {Object.entries(mapPositions).map(([key, pos]) => (
                   <div key={key} className="flex items-center gap-2 bg-slate-700/30 p-2 rounded">
                     <MapPin className="w-4 h-4 text-red-400" />
-                    <span className="text-slate-300 text-sm font-mono">
+                    <span className="text-slate-300 font-mono text-sm">
                       #{key}: x={pos.x}, y={pos.y}
                     </span>
                     <Button
@@ -1346,123 +1229,7 @@ export function CreateListeningQuestionModal({
             </div>
           )}
 
-          {formData.q_type === "MAP_LABELING" && mapType === "type2" && (
-            <>
-              <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm font-semibold">Harf Variantlari (A, B, C...) *</Label>
-                  <Button
-                    type="button"
-                    onClick={handleAddMapType2Option}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Harf
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Rasmda mavjud harflarni kiriting (masalan: A, B, C, D, E, F, G, H)
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {mapType2Options.map((letter, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Input
-                        value={letter}
-                        onChange={(e) => handleMapType2OptionChange(index, e.target.value)}
-                        className="bg-slate-700/50 border-slate-600 text-white text-center font-bold"
-                        placeholder="A"
-                        maxLength={1}
-                        required
-                      />
-                      {mapType2Options.length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => handleRemoveMapType2Option(index)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300 p-1"
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm font-semibold">Bayonotlar (Map Elementlari) *</Label>
-                  <Button
-                    type="button"
-                    onClick={handleAddMapType2Choice}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Bayonot
-                  </Button>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Har bir bayonot uchun yuqorida kiritilgan harflardan to'g'ri javobni tanlang
-                </p>
-                <div className="space-y-3">
-                  {Object.entries(mapType2Choices).map(([key, value]) => (
-                    <div
-                      key={key}
-                      className="flex items-start gap-3 bg-slate-800/50 p-3 rounded border border-slate-600"
-                    >
-                      <span className="text-blue-400 font-mono text-sm font-bold w-8 mt-2">{key}.</span>
-                      <div className="flex-1 space-y-2">
-                        <Input
-                          value={value}
-                          onChange={(e) => handleMapType2ChoiceChange(key, e.target.value)}
-                          className="bg-slate-700/50 border-slate-600 text-white"
-                          placeholder={`Bayonot ${key} (masalan: Quilt Shop)`}
-                          required
-                        />
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs text-slate-400 w-24">To'g'ri harf:</Label>
-                          <Select
-                            value={mapType2Answers[key] || undefined}
-                            onValueChange={(value) => handleMapType2AnswerChange(key, value)}
-                          >
-                            <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
-                              <SelectValue placeholder="Harfni tanlang" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-700 border-slate-600">
-                              {mapType2Options.map((letter) => (
-                                <SelectItem key={letter} value={letter}>
-                                  {letter}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {mapType2Answers[key] && (
-                            <span className="text-green-400 text-xs font-semibold">✓ {mapType2Answers[key]}</span>
-                          )}
-                        </div>
-                      </div>
-                      {Object.keys(mapType2Choices).length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => handleRemoveMapType2Choice(key)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300 mt-2"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          {/* Removed MAP Type 2 UI section */}
 
           {/* Conditionally render options based on q_type */}
           {(needsOptions || formData.q_type === "MAP_LABELING") && (
@@ -1559,7 +1326,7 @@ export function CreateListeningQuestionModal({
           )}
 
           {/* MAP_LABELING Type 1 options and answers */}
-          {formData.q_type === "MAP_LABELING" && mapType === "type1" && (
+          {formData.q_type === "MAP_LABELING" && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-slate-300 text-sm">Tanlov Variantlari (A, B, C, D...) *</Label>
