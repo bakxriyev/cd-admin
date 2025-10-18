@@ -74,6 +74,14 @@ export function CreateListeningQuestionModal({
   const [tfngOptions, setTfngOptions] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G", "H"])
   const [tfngAnswers, setTfngAnswers] = useState<Record<string, string>>({})
 
+  const [summaryDragRows, setSummaryDragRows] = useState<Array<{ label: string; value: string }>>([
+    { label: "People", value: "" },
+    { label: "Staff Responsibilities", value: "" },
+  ])
+  const [summaryDragChoices, setSummaryDragChoices] = useState<Record<string, string>>({ "1": "" })
+  const [summaryDragOptions, setSummaryDragOptions] = useState<string[]>([""])
+  const [summaryDragAnswers, setSummaryDragAnswers] = useState<Record<string, string>>({})
+
   useEffect(() => {
     const questionToLoad = editingQuestion || copyingQuestion
 
@@ -191,6 +199,21 @@ export function CreateListeningQuestionModal({
           setTfngAnswers(questionToLoad.correct_answers as Record<string, string>)
         }
       }
+
+      if (questionToLoad.q_type === "SUMMARY_DRAG") {
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setSummaryDragRows(questionToLoad.rows as Array<{ label: string; value: string }>)
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setSummaryDragChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setSummaryDragOptions(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setSummaryDragAnswers(questionToLoad.correct_answers as Record<string, string>)
+        }
+      }
     } else {
       setFormData({
         q_type: "MCQ_SINGLE",
@@ -218,6 +241,13 @@ export function CreateListeningQuestionModal({
       setTfngChoices({ "1": "" })
       setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
       setTfngAnswers({})
+      setSummaryDragRows([
+        { label: "People", value: "" },
+        { label: "Staff Responsibilities", value: "" },
+      ])
+      setSummaryDragChoices({ "1": "" })
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
     }
     setPhotoFile(null)
   }, [editingQuestion, copyingQuestion, isOpen])
@@ -308,6 +338,25 @@ export function CreateListeningQuestionModal({
       setMapPositions({})
       setImagePreview("")
       // Removed mapType2Options reset
+    }
+    if (value === "SUMMARY_DRAG") {
+      setSummaryDragRows([
+        { label: "People", value: "" },
+        { label: "Staff Responsibilities", value: "" },
+      ])
+      setSummaryDragChoices({ "1": "" })
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
+      setOptions([])
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+      setMapPositions({})
+      setImagePreview("")
     }
   }
 
@@ -762,7 +811,6 @@ export function CreateListeningQuestionModal({
         "MCQ_MULTI",
         "MATCHING",
         "TFNG",
-        "SUMMARY_DRAG",
         "SENTENCE_ENDINGS",
         "MATCHING_HEADINGS",
         "MULTIPLE_CHOICE",
@@ -807,6 +855,21 @@ export function CreateListeningQuestionModal({
       }
     }
 
+    if (formData.q_type === "SUMMARY_DRAG") {
+      if (Object.values(summaryDragChoices).some((choice) => !choice.trim())) {
+        setError("Barcha tanlov variantlarini to'ldiring")
+        return
+      }
+      if (summaryDragOptions.some((opt) => !opt.trim())) {
+        setError("Barcha variantlarni to'ldiring")
+        return
+      }
+      if (Object.keys(summaryDragAnswers).length === 0) {
+        setError("Kamida bitta to'g'ri javobni belgilang")
+        return
+      }
+    }
+
     setLoading(true)
     setError("")
 
@@ -816,7 +879,7 @@ export function CreateListeningQuestionModal({
         q_type: formData.q_type,
       }
 
-      if (formData.q_type !== "NOTE_COMPLETION") {
+      if (formData.q_type !== "NOTE_COMPLETION" && formData.q_type !== "SUMMARY_DRAG") {
         if (!formData.q_text.trim()) {
           setError("Savol matni majburiy")
           setLoading(false)
@@ -825,7 +888,25 @@ export function CreateListeningQuestionModal({
         questionData.q_text = formData.q_text
       }
 
-      if (formData.q_type === "TFNG") {
+      if (formData.q_type === "SUMMARY_DRAG") {
+        if (formData.q_text.trim()) {
+          questionData.q_text = formData.q_text
+        }
+        questionData.rows = {
+          headers: summaryDragRows.some((row) => row.label.trim())
+            ? summaryDragRows.map((row) => row.label).filter((label) => label.trim())
+            : null,
+        }
+        questionData.options = summaryDragChoices
+        questionData.choices = summaryDragOptions
+        questionData.correct_answers = summaryDragAnswers
+
+        if (editingQuestion && !copyingQuestion) {
+          await api.lQuestions.update(editingQuestion.id.toString(), questionData)
+        } else {
+          await api.lQuestions.create(questionData)
+        }
+      } else if (formData.q_type === "TFNG") {
         const formDataWithFile = new FormData()
         formDataWithFile.append("listening_questions_id", listeningQuestionsId)
         formDataWithFile.append("q_type", "TFNG")
@@ -907,7 +988,6 @@ export function CreateListeningQuestionModal({
           "MCQ_MULTI",
           "MATCHING",
           "TFNG",
-          "SUMMARY_DRAG",
           "SENTENCE_ENDINGS",
           "MATCHING_HEADINGS",
           "MULTIPLE_CHOICE",
@@ -978,6 +1058,13 @@ export function CreateListeningQuestionModal({
       setTfngChoices({ "1": "" })
       setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
       setTfngAnswers({})
+      setSummaryDragRows([
+        { label: "People", value: "" },
+        { label: "Staff Responsibilities", value: "" },
+      ])
+      setSummaryDragChoices({ "1": "" })
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
     } catch (error: any) {
       console.error("Failed to save listening question:", error)
       if (error.response?.data?.message) {
@@ -1001,7 +1088,6 @@ export function CreateListeningQuestionModal({
     "MCQ_MULTI",
     "MATCHING",
     "MAP_LABELING",
-    "SUMMARY_DRAG",
     "SENTENCE_ENDINGS",
     "MATCHING_HEADINGS",
     "MULTIPLE_CHOICE",
@@ -1012,6 +1098,7 @@ export function CreateListeningQuestionModal({
   const isFlowChart = formData.q_type === "FLOW_CHART"
   const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
   const needsPhoto = ["MAP_LABELING", "TFNG"].includes(formData.q_type) // TFNG also needs photo
+  const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -2052,6 +2139,171 @@ export function CreateListeningQuestionModal({
                         </SelectContent>
                       </Select>
                       {tfngAnswers[choiceKey] && <span className="text-green-400 text-sm font-bold w-8">✓</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isSummaryDrag && (
+            <div className="space-y-4">
+              {/* Column Headers */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Qator Sarlavhalari (Ustun Nomlari) - Ixtiyoriy</Label>
+                <div className="space-y-2">
+                  {summaryDragRows.map((row, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="text-slate-400 text-sm w-20">Qator {index + 1}:</span>
+                      <Input
+                        value={row.label}
+                        onChange={(e) => {
+                          const newRows = [...summaryDragRows]
+                          newRows[index].label = e.target.value
+                          setSummaryDragRows(newRows)
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={index === 0 ? "People" : "Staff Responsibilities"}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Choices (Left Column Items) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Tanlov Variantlari (Chap Ustun) *</Label>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const nextKey = (Object.keys(summaryDragChoices).length + 1).toString()
+                      setSummaryDragChoices((prev) => ({ ...prev, [nextKey]: "" }))
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 font-mono text-sm w-8">{key}.</span>
+                      <Input
+                        value={value}
+                        onChange={(e) => {
+                          setSummaryDragChoices((prev) => ({ ...prev, [key]: e.target.value }))
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${key} (masalan: Mary Brown)`}
+                        required
+                      />
+                      {Object.keys(summaryDragChoices).length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const newChoices = { ...summaryDragChoices }
+                            delete newChoices[key]
+                            setSummaryDragChoices(newChoices)
+
+                            const newAnswers = { ...summaryDragAnswers }
+                            delete newAnswers[key]
+                            setSummaryDragAnswers(newAnswers)
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Options (Right Column Items) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Variantlar (O'ng Ustun) *</Label>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setSummaryDragOptions((prev) => [...prev, ""])
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {summaryDragOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...summaryDragOptions]
+                          newOptions[index] = e.target.value
+                          setSummaryDragOptions(newOptions)
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${index + 1} (masalan: Finance)`}
+                        required
+                      />
+                      {summaryDragOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const newOptions = summaryDragOptions.filter((_, i) => i !== index)
+                            setSummaryDragOptions(newOptions)
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Correct Answers */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">To'g'ri Javoblarni Belgilang *</Label>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-32">
+                        {key}. {value}
+                      </span>
+                      <Select
+                        value={summaryDragAnswers[key] || ""}
+                        onValueChange={(val) => {
+                          setSummaryDragAnswers((prev) => ({ ...prev, [key]: val }))
+                        }}
+                      >
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Variant tanlang" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {summaryDragOptions
+                            .filter((option) => option.trim())
+                            .map((option, index) => (
+                              <SelectItem key={index} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      {summaryDragAnswers[key] && <span className="text-green-400 text-sm font-bold">✓</span>}
                     </div>
                   ))}
                 </div>

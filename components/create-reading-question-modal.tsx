@@ -64,6 +64,10 @@ export function CreateReadingQuestionModal({
   const [matchingHeadingsAnswers, setMatchingHeadingsAnswers] = useState<Record<string, string>>({})
   const [noteTemplate, setNoteTemplate] = useState("")
   const [noteAnswers, setNoteAnswers] = useState<Record<string, string>>({})
+  const [summaryDragRows, setSummaryDragRows] = useState<string[]>(["", ""])
+  const [summaryDragChoices, setSummaryDragChoices] = useState<Record<string, string>>({})
+  const [summaryDragOptions, setSummaryDragOptions] = useState<string[]>([""])
+  const [summaryDragAnswers, setSummaryDragAnswers] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
@@ -137,6 +141,20 @@ export function CreateReadingQuestionModal({
           setNoteAnswers({})
         }
       }
+      if (questionToLoad.q_type === "SUMMARY_DRAG") {
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setSummaryDragRows(questionToLoad.rows)
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setSummaryDragChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setSummaryDragOptions(questionToLoad.options)
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setSummaryDragAnswers(questionToLoad.answers)
+        }
+      }
 
       if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
         setCorrectAnswers(questionToLoad.correct_answers)
@@ -162,6 +180,10 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsAnswers({})
       setNoteTemplate("")
       setNoteAnswers({})
+      setSummaryDragRows(["", ""])
+      setSummaryDragChoices({})
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
     }
   }, [editingQuestion, copyingQuestion, isOpen])
 
@@ -236,6 +258,19 @@ export function CreateReadingQuestionModal({
       setMatchingAnswers({})
     } else if (["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(value)) {
       setOptions([{ key: "A", text: "" }])
+      setCorrectAnswers([])
+      setColumns([])
+      setRows([])
+      setChoices({})
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+    } else if (value === "SUMMARY_DRAG") {
+      setSummaryDragRows(["", ""])
+      setSummaryDragChoices({})
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
+      setOptions([])
       setCorrectAnswers([])
       setColumns([])
       setRows([])
@@ -537,6 +572,19 @@ export function CreateReadingQuestionModal({
         setError("Barcha jadval maydonlarini to'ldiring")
         return
       }
+    } else if (formData.q_type === "SUMMARY_DRAG") {
+      if (summaryDragRows.some((row) => !row.trim())) {
+        setError("Barcha qatorlarni to'ldiring")
+        return
+      }
+      if (summaryDragOptions.some((opt) => !opt.trim())) {
+        setError("Barcha optionlarni to'ldiring")
+        return
+      }
+      if (Object.keys(summaryDragAnswers).length === 0) {
+        setError("Kamida bitta to'g'ri javobni belgilang")
+        return
+      }
     }
 
     setLoading(true)
@@ -567,6 +615,12 @@ export function CreateReadingQuestionModal({
       } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
         questionData.correct_answers = correctAnswers
       }
+      if (formData.q_type === "SUMMARY_DRAG") {
+        questionData.rows = summaryDragRows
+        questionData.choices = summaryDragChoices
+        questionData.options = summaryDragOptions
+        questionData.answers = summaryDragAnswers
+      }
 
       if (editingQuestion && !copyingQuestion) {
         await api.rQuestions.update(editingQuestion.id.toString(), questionData)
@@ -594,6 +648,11 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsAnswers({})
       setNoteTemplate("")
       setNoteAnswers({})
+      // Reset SUMMARY_DRAG states after submission
+      setSummaryDragRows(["", ""])
+      setSummaryDragChoices({})
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
     } catch (error: any) {
       console.error("Failed to save reading question:", error)
       setError("Savol saqlashda xatolik yuz berdi")
@@ -609,6 +668,8 @@ export function CreateReadingQuestionModal({
   const isMatchingHeadings = formData.q_type === "MATCHING_HEADINGS"
   // Added isNoteCompletion flag
   const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
+  // Added isSummaryDrag flag
+  const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -1250,6 +1311,169 @@ export function CreateReadingQuestionModal({
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
                         placeholder="Masalan: Sunrise yoki center / centre"
                       />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUMMARY_DRAG UI section */}
+          {isSummaryDrag && (
+            <div className="space-y-4">
+              {/* Column Headers */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Ustun Sarlavhalari (2 ta) *</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {summaryDragRows.map((row, index) => (
+                    <Input
+                      key={index}
+                      value={row}
+                      onChange={(e) => {
+                        const newRows = [...summaryDragRows]
+                        newRows[index] = e.target.value
+                        setSummaryDragRows(newRows)
+                      }}
+                      className="bg-slate-700/50 border-slate-600 text-white"
+                      placeholder={index === 0 ? "Masalan: People" : "Masalan: Staff Responsibilities"}
+                      required
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Left Column Items (Choices) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Chap Ustun Elementlari ({summaryDragRows[0]}) *</Label>
+                  <Button
+                    type="button"
+                    onClick={() =>
+                      setSummaryDragChoices((prev) => ({ ...prev, [(Object.keys(prev).length + 1).toString()]: "" }))
+                    }
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Element
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 font-mono text-sm w-8">{key}.</span>
+                      <Input
+                        value={value}
+                        onChange={(e) =>
+                          setSummaryDragChoices((prev) => ({
+                            ...prev,
+                            [key]: e.target.value,
+                          }))
+                        }
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Element ${key} (masalan: Mary Brown)`}
+                        required
+                      />
+                      {Object.keys(summaryDragChoices).length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const newChoices = { ...summaryDragChoices }
+                            delete newChoices[key]
+                            setSummaryDragChoices(newChoices)
+                            const newAnswers = { ...summaryDragAnswers }
+                            delete newAnswers[key]
+                            setSummaryDragAnswers(newAnswers)
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Column Items (Options) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">O'ng Ustun Elementlari ({summaryDragRows[1]}) *</Label>
+                  <Button
+                    type="button"
+                    onClick={() => setSummaryDragOptions((prev) => [...prev, ""])}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Option
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {summaryDragOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...summaryDragOptions]
+                          newOptions[index] = e.target.value
+                          setSummaryDragOptions(newOptions)
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Option ${index + 1} (masalan: Finance)`}
+                        required
+                      />
+                      {summaryDragOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const newOptions = summaryDragOptions.filter((_, i) => i !== index)
+                            setSummaryDragOptions(newOptions)
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Correct Answers */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">To'g'ri Javoblarni Belgilang *</Label>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([choiceKey, choiceValue]) => (
+                    <div key={choiceKey} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-32">{choiceValue}:</span>
+                      <Select
+                        value={summaryDragAnswers[choiceKey] || ""}
+                        onValueChange={(value) =>
+                          setSummaryDragAnswers((prev) => ({
+                            ...prev,
+                            [choiceKey]: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Option tanlang" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {summaryDragOptions.map((option, index) => (
+                            <SelectItem key={index} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {summaryDragAnswers[choiceKey] && <span className="text-green-400 text-sm font-bold">✓</span>}
                     </div>
                   ))}
                 </div>
