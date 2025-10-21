@@ -22,6 +22,7 @@ import { CreateReadingQuestionModal } from "@/components/create-reading-question
 import { CreatePassageModal } from "@/components/create-passage-modal"
 import { PassageRenderer } from "../../../../../../components/passage-render"
 import { Plus, BookOpen, ChevronDown, ChevronUp } from "lucide-react"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 
 interface ReadingWithQuestions extends Reading {
   questions?: Array<ReadingQuestions & { r_questions: ReadingQuestion[] }>
@@ -45,6 +46,7 @@ export default function ReadingDetailPage() {
   const [editingPassage, setEditingPassage] = useState<Passage | null>(null)
   const [collapsedPassages, setCollapsedPassages] = useState<Record<number, boolean>>({})
   const [userType, setUserType] = useState<string>("")
+  const [selectedPart, setSelectedPart] = useState<string>("ALL")
 
   const examId = params.id as string
   const readingId = params.readingId as string
@@ -78,7 +80,6 @@ export default function ReadingDetailPage() {
       const passagesArray = Array.isArray(passagesData) ? passagesData : []
       const currentReadingId = Number.parseInt(readingId)
 
-      // Filter passages by reading_id to ensure we only show passages for this specific reading
       const filteredPassages = passagesArray.filter((passage) => {
         const passageReadingId = Number(passage.reading_id)
         console.log(
@@ -97,7 +98,6 @@ export default function ReadingDetailPage() {
       console.log("[v0] Filtered passages for reading", readingId, ":", filteredPassages)
       setPassages(filteredPassages)
 
-      // Initialize collapsed state for filtered passages only
       const initialCollapsedState: Record<number, boolean> = {}
       filteredPassages.forEach((passage) => {
         initialCollapsedState[passage.id] = true
@@ -201,6 +201,13 @@ export default function ReadingDetailPage() {
   }
 
   const isClientUser = userType === "client"
+  const sections = reading?.questions || []
+
+  const filteredSections =
+    selectedPart === "ALL" ? sections : sections.filter((section) => section.part === selectedPart)
+
+  const filteredPassages =
+    selectedPart === "ALL" ? passages : passages.filter((passage) => passage.part === selectedPart)
 
   if (loading) {
     return (
@@ -231,8 +238,6 @@ export default function ReadingDetailPage() {
       </DashboardLayout>
     )
   }
-
-  const sections = reading.questions || []
 
   return (
     <DashboardLayout>
@@ -279,11 +284,24 @@ export default function ReadingDetailPage() {
           )}
         </div>
 
-        {passages.length > 0 && (
+        {filteredPassages.length > 0 && (
           <div className="space-y-3">
-            <h2 className="text-lg font-bold text-white">Passages</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Passages</h2>
+              <Select value={selectedPart} onValueChange={setSelectedPart}>
+                <SelectTrigger className="w-40 bg-slate-700/50 border-slate-600 text-white">
+                  <SelectValue placeholder="Bo'limni tanlang" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-700 border-slate-600">
+                  <SelectItem value="ALL">Barcha Bo'limlar</SelectItem>
+                  <SelectItem value="PART1">PART1</SelectItem>
+                  <SelectItem value="PART2">PART2</SelectItem>
+                  <SelectItem value="PART3">PART3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid gap-3">
-              {passages.map((passage) => (
+              {filteredPassages.map((passage) => (
                 <Collapsible
                   key={passage.id}
                   open={!collapsedPassages[passage.id]}
@@ -355,7 +373,6 @@ export default function ReadingDetailPage() {
           </div>
         )}
 
-        {/* Original Reading Passage (kept for backward compatibility) */}
         {reading.passage_text && (
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader className="pb-2">
@@ -373,9 +390,22 @@ export default function ReadingDetailPage() {
 
         {/* Reading Sections */}
         <div className="space-y-3">
-          <h2 className="text-lg font-bold text-white">Reading Bo'limlari</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white">Reading Bo'limlari</h2>
+            <Select value={selectedPart} onValueChange={setSelectedPart}>
+              <SelectTrigger className="w-40 bg-slate-700/50 border-slate-600 text-white">
+                <SelectValue placeholder="Bo'limni tanlang" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-700 border-slate-600">
+                <SelectItem value="ALL">Barcha Bo'limlar</SelectItem>
+                <SelectItem value="PART1">PART1</SelectItem>
+                <SelectItem value="PART2">PART2</SelectItem>
+                <SelectItem value="PART3">PART3</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {sections.length === 0 ? (
+          {filteredSections.length === 0 ? (
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="text-center py-6">
                 <BookOpen className="w-10 h-10 text-slate-400 mx-auto mb-3" />
@@ -389,7 +419,7 @@ export default function ReadingDetailPage() {
             </Card>
           ) : (
             <div className="grid gap-3">
-              {sections.map((section) => {
+              {filteredSections.map((section) => {
                 const sectionQuestions = section.r_questions || []
                 return (
                   <Card key={section.id} className="bg-slate-800/50 border-slate-700">
@@ -435,7 +465,6 @@ export default function ReadingDetailPage() {
                     <CardContent className="space-y-2 pt-0">
                       {section.instruction && <p className="text-slate-300 text-xs">{section.instruction}</p>}
 
-                      {/* Questions for this section */}
                       <div className="space-y-2">
                         {sectionQuestions.length > 0 ? (
                           <div className="grid gap-2">
@@ -514,7 +543,6 @@ export default function ReadingDetailPage() {
 
       {!isClientUser && (
         <>
-          {/* Modals */}
           <CreateReadingSectionModal
             isOpen={showSectionModal}
             onClose={() => {

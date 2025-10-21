@@ -12,6 +12,7 @@ import { api, type Listening, type ListeningQuestions, type ListeningQuestion } 
 import { CreateListeningSectionModal } from "@/components/create-listening-section-modal"
 import { CreateListeningQuestionModal } from "@/components/create-listening-question-modal"
 import { Plus, Headphones, Clock, Volume2, AlertCircle, Edit, Trash2, Upload } from "lucide-react"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 
 interface ListeningWithQuestions extends Listening {
   questions?: Array<ListeningQuestions & { l_questions: ListeningQuestion[] }>
@@ -32,6 +33,7 @@ export default function ListeningDetailPage() {
   const [copyingQuestion, setCopyingQuestion] = useState<ListeningQuestion | null>(null)
   const [audioError, setAudioError] = useState<string>("")
   const [audioLoaded, setAudioLoaded] = useState(false)
+  const [selectedPart, setSelectedPart] = useState<string>("ALL")
 
   const examId = params.id as string
   const listeningId = params.listeningId as string
@@ -178,7 +180,6 @@ export default function ListeningDetailPage() {
       formData.append("title", listening?.title || "")
       formData.append("description", listening?.description || "")
       formData.append("exam_id", examId)
-      // Remove audio_file by not including it
 
       const response = await api.listening.update(listeningId, formData)
       console.log("[v0] Audio deleted successfully:", response)
@@ -195,7 +196,7 @@ export default function ListeningDetailPage() {
     const audioFile = listening.audio_file || listening.audio_url || listening.audioFile || listening.audioUrl
     if (!audioFile) return ""
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL 
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://backend.realexamielts.uz"
     const audioUrl = `${baseUrl}${audioFile}`
 
     console.log("[v0] Constructed audio URL:", audioUrl)
@@ -215,6 +216,39 @@ export default function ListeningDetailPage() {
   }
 
   const sections = listening?.questions || []
+
+  const filteredSections =
+    selectedPart === "ALL" ? sections : sections.filter((section) => section.part === selectedPart)
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 bg-slate-700 rounded animate-pulse" />
+            <div className="h-8 w-64 bg-slate-700 rounded animate-pulse" />
+          </div>
+          <div className="h-64 w-full bg-slate-700 rounded animate-pulse" />
+          <div className="h-96 w-full bg-slate-700 rounded animate-pulse" />
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  if (error || !listening) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <div className="w-16 h-16 bg-slate-400 rounded" />
+          <h2 className="text-xl font-semibold text-slate-300">Listening topilmadi</h2>
+          <p className="text-slate-400 text-center">{error || "So'ralgan listening mavjud emas"}</p>
+          <Button onClick={() => router.back()} variant="outline">
+            ← Orqaga
+          </Button>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout>
@@ -326,19 +360,6 @@ export default function ListeningDetailPage() {
                       <span>{audioError}</span>
                     </div>
                   )}
-                  {process.env.NODE_ENV === "development" && (
-                    <div className="text-xs text-slate-500 bg-slate-800 rounded p-2 space-y-1">
-                      <p>Debug URL: {getAudioUrl()}</p>
-                      <p>
-                        Audio file field:{" "}
-                        {JSON.stringify({
-                          audio_file: listening.audio_file,
-                          audio_url: listening.audio_url,
-                        })}
-                      </p>
-                      <p>Browser format support: {JSON.stringify(getSupportedAudioFormats())}</p>
-                    </div>
-                  )}
                 </div>
                 {listening.description && (
                   <p className="text-slate-300 text-sm bg-slate-700/30 rounded p-2">{listening.description}</p>
@@ -348,17 +369,6 @@ export default function ListeningDetailPage() {
               <div className="text-center py-6">
                 <Volume2 className="w-10 h-10 text-slate-400 mx-auto mb-3" />
                 <p className="text-slate-400 text-sm">Audio fayl mavjud emas</p>
-                {process.env.NODE_ENV === "development" && listening && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    Debug:{" "}
-                    {JSON.stringify({
-                      audio_file: listening.audio_file,
-                      audio_url: listening.audio_url,
-                      audioFile: (listening as any).audioFile,
-                      audioUrl: (listening as any).audioUrl,
-                    })}
-                  </p>
-                )}
               </div>
             )}
           </CardContent>
@@ -366,9 +376,23 @@ export default function ListeningDetailPage() {
 
         {/* Listening Sections */}
         <div className="space-y-3">
-          <h2 className="text-lg font-bold text-white">Listening Bo'limlari</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white">Listening Bo'limlari</h2>
+            <Select value={selectedPart} onValueChange={setSelectedPart}>
+              <SelectTrigger className="w-40 bg-slate-700/50 border-slate-600 text-white">
+                <SelectValue placeholder="Bo'limni tanlang" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-700 border-slate-600">
+                <SelectItem value="ALL">Barcha Bo'limlar</SelectItem>
+                <SelectItem value="PART1">PART1</SelectItem>
+                <SelectItem value="PART2">PART2</SelectItem>
+                <SelectItem value="PART3">PART3</SelectItem>
+                <SelectItem value="PART4">PART4</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {sections.length === 0 ? (
+          {filteredSections.length === 0 ? (
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="text-center py-6">
                 <Headphones className="w-10 h-10 text-slate-400 mx-auto mb-3" />
@@ -380,7 +404,7 @@ export default function ListeningDetailPage() {
             </Card>
           ) : (
             <div className="grid gap-3">
-              {sections.map((section) => {
+              {filteredSections.map((section) => {
                 const sectionQuestions = section.l_questions || []
                 return (
                   <Card key={section.id} className="bg-slate-800/50 border-slate-700">
