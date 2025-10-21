@@ -479,21 +479,41 @@ export default function ReadingDetailPage() {
                                       <Badge variant="outline" className="border-slate-500 text-slate-400 text-xs">
                                         {question.q_type}
                                       </Badge>
-                                      {question.correct_answers && question.correct_answers.length > 0 && (
-                                        <span className="text-green-400 text-xs">
-                                          To'g'ri: {question.correct_answers.join(", ")}
-                                        </span>
-                                      )}
+                                      {question.q_type === "NOTE_COMPLETION"
+                                        ? question.answers &&
+                                          Object.keys(question.answers).length > 0 && (
+                                            <span className="text-green-400 text-xs">
+                                              Javoblar:{" "}
+                                              {Object.entries(question.answers)
+                                                .map(([key, value]) => `${key}: ${value}`)
+                                                .join(", ")}
+                                            </span>
+                                          )
+                                        : question.correct_answers &&
+                                          question.correct_answers.length > 0 && (
+                                            <span className="text-green-400 text-xs">
+                                              To'g'ri: {question.correct_answers.join(", ")}
+                                            </span>
+                                          )}
                                     </div>
-                                    {question.options && question.options.length > 0 && (
-                                      <div className="mt-1 text-xs text-slate-300">
-                                        {question.options.map((opt: any, i: number) => (
-                                          <span key={i} className="mr-2">
-                                            {opt.key}: {opt.text}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
+                                    {question.q_type === "NOTE_COMPLETION"
+                                      ? question.options &&
+                                        typeof question.options === "string" && (
+                                          <div className="mt-1 text-xs text-slate-300">
+                                            <div dangerouslySetInnerHTML={{ __html: question.options }} />
+                                          </div>
+                                        )
+                                      : question.options &&
+                                        Array.isArray(question.options) &&
+                                        question.options.length > 0 && (
+                                          <div className="mt-1 text-xs text-slate-300">
+                                            {question.options.map((opt: any, i: number) => (
+                                              <span key={i} className="mr-2">
+                                                {opt.key}: {opt.text}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
                                   </div>
                                   {!isClientUser && (
                                     <div className="flex items-center gap-1">

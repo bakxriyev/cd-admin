@@ -71,6 +71,37 @@ export function CreateReadingQuestionModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
+  const countBlanks = (template: string): number => {
+    return (template.match(/____/g) || []).length
+  }
+
+  const handleNoteTemplateChange = (value: string) => {
+    setNoteTemplate(value)
+    const blankCount = countBlanks(value)
+    const currentAnswerCount = Object.keys(noteAnswers).length
+
+    if (blankCount > currentAnswerCount) {
+      const newAnswers = { ...noteAnswers }
+      for (let i = currentAnswerCount + 1; i <= blankCount; i++) {
+        newAnswers[i.toString()] = ""
+      }
+      setNoteAnswers(newAnswers)
+    } else if (blankCount < currentAnswerCount) {
+      const newAnswers: Record<string, string> = {}
+      for (let i = 1; i <= blankCount; i++) {
+        newAnswers[i.toString()] = noteAnswers[i.toString()] || ""
+      }
+      setNoteAnswers(newAnswers)
+    }
+  }
+
+  const handleNoteAnswerChange = (key: string, value: string) => {
+    setNoteAnswers((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
   useEffect(() => {
     const questionToLoad = editingQuestion || copyingQuestion
 
@@ -133,12 +164,11 @@ export function CreateReadingQuestionModal({
           setOptions([{ key: "A", text: "" }])
         }
       } else if (questionToLoad.q_type === "NOTE_COMPLETION") {
-        // Load NOTE_COMPLETION data
-        setNoteTemplate(questionToLoad.options || "")
+        if (typeof questionToLoad.options === "string") {
+          setNoteTemplate(questionToLoad.options)
+        }
         if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          setNoteAnswers(questionToLoad.correct_answers)
-        } else {
-          setNoteAnswers({})
+          setNoteAnswers(questionToLoad.correct_answers as Record<string, string>)
         }
       }
       if (questionToLoad.q_type === "SUMMARY_DRAG") {
@@ -191,94 +221,25 @@ export function CreateReadingQuestionModal({
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleQuestionTypeChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, q_type: value as ReadingQuestion["q_type"] }))
-
-    if (value === "TABLE_COMPLETION") {
-      setColumns([""])
-      setRows([{ label: "", cells: [""] }])
-      setChoices({})
-      setOptions([])
-      setCorrectAnswers([])
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-    } else if (value === "NOTE_COMPLETION") {
-      setNoteTemplate("")
-      setNoteAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMatchingHeadingsOptions([{ key: "A", text: "" }])
-      setMatchingHeadingsInputCount(1)
-      setMatchingHeadingsAnswers({})
-    } else if (value === "MATCHING_INFORMATION") {
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-    } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(value)) {
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-    } else if (value === "MATCHING_HEADINGS") {
-      const matchingPassages = passages.filter((p) => p.type === "matching")
-      let inputCount = 1
-
-      if (matchingPassages.length > 0) {
-        const passageText = matchingPassages[0].reading_text
-        const inputMatches = passageText.match(/\b(\d+)\./g) || []
-        inputCount = inputMatches.length > 0 ? inputMatches.length : 1
-      }
-
-      setMatchingHeadingsInputCount(inputCount)
-      setMatchingHeadingsOptions([{ key: "A", text: "" }])
-      setMatchingHeadingsAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-    } else if (["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(value)) {
-      setOptions([{ key: "A", text: "" }])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-    } else if (value === "SUMMARY_DRAG") {
-      setSummaryDragRows(["", ""])
-      setSummaryDragChoices({})
-      setSummaryDragOptions([""])
-      setSummaryDragAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-    }
+  const handleQuestionTypeChange = (type: string) => {
+    setFormData((prev) => ({ ...prev, q_type: type }))
+    setOptions([{ key: "A", text: "" }])
+    setCorrectAnswers([])
+    setColumns([""])
+    setRows([{ label: "", cells: [""] }])
+    setChoices({})
+    setMatchingChoices({ A: "" })
+    setMatchingRows([""])
+    setMatchingAnswers({})
+    setMatchingHeadingsOptions([{ key: "A", text: "" }])
+    setMatchingHeadingsInputCount(1)
+    setMatchingHeadingsAnswers({})
+    setNoteTemplate("")
+    setNoteAnswers({})
+    setSummaryDragRows(["", ""])
+    setSummaryDragChoices({})
+    setSummaryDragOptions([""])
+    setSummaryDragAnswers({})
   }
 
   const handleAddOption = () => {
@@ -522,7 +483,7 @@ export function CreateReadingQuestionModal({
     e.preventDefault()
     if (!readingQuestionsId) return
 
-    if (!formData.q_text.trim()) {
+    if (formData.q_type !== "NOTE_COMPLETION" && !formData.q_text.trim()) {
       setError("Savol matni majburiy")
       return
     }
@@ -532,9 +493,13 @@ export function CreateReadingQuestionModal({
         setError("Shablonni to'ldiring")
         return
       }
-      const blankCount = (noteTemplate.match(/____/g) || []).length
+      const blankCount = countBlanks(noteTemplate)
       if (blankCount === 0) {
         setError("Kamida bitta ____ bo'sh joy qo'shish kerak")
+        return
+      }
+      if (Object.values(noteAnswers).some((answer) => !answer.trim())) {
+        setError("Barcha bo'sh joylar uchun javob kiritish kerak")
         return
       }
     } else if (formData.q_type === "MATCHING_INFORMATION") {
@@ -594,13 +559,16 @@ export function CreateReadingQuestionModal({
       const questionData: any = {
         reading_questions_id: Number.parseInt(readingQuestionsId),
         q_type: formData.q_type,
-        q_text: formData.q_text,
         photo: formData.photo || undefined,
+      }
+
+      if (formData.q_type !== "NOTE_COMPLETION" || formData.q_text.trim()) {
+        questionData.q_text = formData.q_text
       }
 
       if (formData.q_type === "NOTE_COMPLETION") {
         questionData.options = noteTemplate
-        questionData.correct_answers = noteAnswers
+        questionData.answers = noteAnswers
       } else if (formData.q_type === "MATCHING_INFORMATION") {
         questionData.choices = matchingChoices
         questionData.rows = matchingRows
@@ -648,7 +616,6 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsAnswers({})
       setNoteTemplate("")
       setNoteAnswers({})
-      // Reset SUMMARY_DRAG states after submission
       setSummaryDragRows(["", ""])
       setSummaryDragChoices({})
       setSummaryDragOptions([""])
@@ -666,9 +633,7 @@ export function CreateReadingQuestionModal({
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
   const isMatchingHeadings = formData.q_type === "MATCHING_HEADINGS"
-  // Added isNoteCompletion flag
   const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
-  // Added isSummaryDrag flag
   const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
 
   return (
@@ -722,26 +687,43 @@ export function CreateReadingQuestionModal({
                 <SelectItem value="SUMMARY_COMPLETION">SUMMARY_COMPLETION</SelectItem>
                 <SelectItem value="SUMMARY_DRAG">SUMMARY_DRAG</SelectItem>
                 <SelectItem value="SENTENCE_ENDINGS">SENTENCE_ENDINGS</SelectItem>
-                {/* Add NOTE_COMPLETION to question type selector */}
                 <SelectItem value="NOTE_COMPLETION">NOTE_COMPLETION</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="q_text" className="text-slate-300 text-sm">
-              Savol Matni *
-            </Label>
-            <Textarea
-              id="q_text"
-              value={formData.q_text}
-              onChange={(e) => handleInputChange("q_text", e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white resize-y"
-              placeholder="What is the main idea of paragraph 1?"
-              rows={2}
-              required
-            />
-          </div>
+          {formData.q_type !== "NOTE_COMPLETION" && (
+            <div className="space-y-2">
+              <Label htmlFor="q_text" className="text-slate-300 text-sm">
+                Savol Matni *
+              </Label>
+              <Textarea
+                id="q_text"
+                value={formData.q_text}
+                onChange={(e) => handleInputChange("q_text", e.target.value)}
+                className="bg-slate-700/50 border-slate-600 text-white resize-y"
+                placeholder="What is the main idea of paragraph 1?"
+                rows={2}
+                required
+              />
+            </div>
+          )}
+
+          {formData.q_type === "NOTE_COMPLETION" && (
+            <div className="space-y-2">
+              <Label htmlFor="q_text" className="text-slate-300 text-sm">
+                Savol Matni (ixtiyoriy)
+              </Label>
+              <Textarea
+                id="q_text"
+                value={formData.q_text}
+                onChange={(e) => handleInputChange("q_text", e.target.value)}
+                className="bg-slate-700/50 border-slate-600 text-white resize-y"
+                placeholder="What is the main idea of paragraph 1?"
+                rows={2}
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="photo" className="text-slate-300 text-sm">
@@ -1270,55 +1252,60 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
-          {/* Add NOTE_COMPLETION UI section */}
           {isNoteCompletion && (
             <div className="space-y-4">
+              {/* Note Template */}
               <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Shablonni Kiriting (HTML bilan) *</Label>
+                <Label className="text-slate-300 text-sm font-semibold">Shablonni Kiriting (HTML bilan) *</Label>
+                <p className="text-xs text-slate-400">
+                  HTML teglaridan foydalaning: &lt;b&gt;, &lt;br&gt;, va bo'sh joylar uchun ____ (4 ta pastki chiziq)
+                </p>
                 <Textarea
                   value={noteTemplate}
-                  onChange={(e) => setNoteTemplate(e.target.value)}
-                  className="bg-slate-700/50 border-slate-600 text-white resize-y font-mono text-xs"
-                  placeholder="<b>Revision Note</b><br>• Problem with: ____<br>• Company name: ____"
-                  rows={4}
+                  onChange={(e) => handleNoteTemplateChange(e.target.value)}
+                  className="bg-slate-700/50 border-slate-600 text-white font-mono resize-y min-h-[200px]"
+                  placeholder={`<b>Revision Note</b><br><br>• Problem with: the brochure sample<br>• Company name: ____ Hotel Chains<br>• Letters of the ____ should be bigger.`}
                   required
                 />
-                <p className="text-xs text-slate-400">
-                  ____ (to'rt chiziq) bilan bo'sh joylarni belgilang. HTML taglardan foydalanishingiz mumkin: &lt;b&gt;,
-                  &lt;br&gt;, &lt;i&gt;, va boshqalar.
-                </p>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">Topilgan bo'sh joylar:</span>
+                  <span className="text-blue-400 font-bold">{countBlanks(noteTemplate)}</span>
+                </div>
               </div>
 
               {/* Correct Answers for blanks */}
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Bo'sh Joylar uchun To'g'ri Javoblar</Label>
-                <div className="text-xs text-slate-400 mb-2">
-                  Shablonda nechta ____ bor, shunaqa ko'p javob kiritish kerak. Bir nechta javoblar uchun " / " bilan
-                  ajrating.
+              {countBlanks(noteTemplate) > 0 && (
+                <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
+                  <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar *</Label>
+                  <p className="text-xs text-slate-400 mb-2">
+                    Har bir bo'sh joy uchun to'g'ri javobni kiriting.{" "}
+                    <span className="text-green-400 font-semibold">
+                      Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
+                    </span>
+                  </p>
+                  <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30">
+                    <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.keys(noteAnswers)
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((key) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-blue-400 font-mono text-sm font-bold w-8">{key}.</span>
+                          <Input
+                            value={noteAnswers[key]}
+                            onChange={(e) => handleNoteAnswerChange(key, e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                            placeholder={`Javob ${key} (masalan: center / centre)`}
+                          />
+                        </div>
+                      ))}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {Array.from({ length: (noteTemplate.match(/____/g) || []).length }, (_, i) => i + 1).map((num) => (
-                    <div key={num} className="flex items-center gap-2">
-                      <span className="text-slate-300 text-sm w-16">Javob {num}:</span>
-                      <Input
-                        value={noteAnswers[num.toString()] || ""}
-                        onChange={(e) =>
-                          setNoteAnswers((prev) => ({
-                            ...prev,
-                            [num.toString()]: e.target.value,
-                          }))
-                        }
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder="Masalan: Sunrise yoki center / centre"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
           )}
 
-          {/* SUMMARY_DRAG UI section */}
           {isSummaryDrag && (
             <div className="space-y-4">
               {/* Column Headers */}
