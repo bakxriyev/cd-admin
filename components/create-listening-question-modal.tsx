@@ -82,6 +82,8 @@ export function CreateListeningQuestionModal({
   const [summaryDragOptions, setSummaryDragOptions] = useState<string[]>([""])
   const [summaryDragAnswers, setSummaryDragAnswers] = useState<Record<string, string>>({})
 
+  const [tableAnswers, setTableAnswers] = useState<Record<string, string>>({})
+
   useEffect(() => {
     const questionToLoad = editingQuestion || copyingQuestion
 
@@ -142,32 +144,14 @@ export function CreateListeningQuestionModal({
           setMatchingAnswers(questionToLoad.answers)
         }
       } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
-        setColumns(questionToLoad.columns || [""])
-        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
-          if (
-            questionToLoad.rows.length > 0 &&
-            typeof questionToLoad.rows[0] === "object" &&
-            "label" in questionToLoad.rows[0]
-          ) {
-            setRows(questionToLoad.rows as Array<{ label: string; cells: string[] }>)
-          } else {
-            setRows([{ label: "", cells: (questionToLoad.rows[0] as string[]) || [""] }])
-          }
-        } else {
-          setRows([{ label: "", cells: [""] }])
-        }
+        setColumns(questionToLoad.columns || [])
+        setRows(questionToLoad.rows || [])
         setChoices(questionToLoad.choices || {})
+        setTableAnswers(questionToLoad.answers || {})
       } else if (
-        [
-          "MCQ_SINGLE",
-          "MCQ_MULTI",
-          "MATCHING",
-          "TFNG",
-          "SUMMARY_DRAG",
-          "SENTENCE_ENDINGS",
-          "MATCHING_HEADINGS",
-          "MULTIPLE_CHOICE",
-        ].includes(questionToLoad.q_type)
+        ["MCQ_SINGLE", "MCQ_MULTI", "MATCHING", "SENTENCE_ENDINGS", "MATCHING_HEADINGS", "MULTIPLE_CHOICE"].includes(
+          questionToLoad.q_type,
+        )
       ) {
         if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
           setOptions(questionToLoad.options)
@@ -184,10 +168,7 @@ export function CreateListeningQuestionModal({
       // Load TFNG specific data
       if (questionToLoad.q_type === "TFNG") {
         if (questionToLoad.photo) {
-          // If photo is already uploaded, we can't get the file object here easily.
-          // The backend should provide a URL, or we rely on the existing photo if updating.
-          // For now, assume no photo object is passed directly for loading.
-          // If editing, the photo might be implicitly handled by the backend.
+          setImagePreview(questionToLoad.photo)
         }
         if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
           setTfngChoices(questionToLoad.choices)
@@ -202,7 +183,7 @@ export function CreateListeningQuestionModal({
 
       if (questionToLoad.q_type === "SUMMARY_DRAG") {
         if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
-          setSummaryDragRows(questionToLoad.rows as Array<{ label: string; value: string }>)
+          setSummaryDragRows(questionToLoad.rows)
         }
         if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
           setSummaryDragChoices(questionToLoad.choices)
@@ -210,8 +191,8 @@ export function CreateListeningQuestionModal({
         if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
           setSummaryDragOptions(questionToLoad.options)
         }
-        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          setSummaryDragAnswers(questionToLoad.correct_answers as Record<string, string>)
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setSummaryDragAnswers(questionToLoad.answers)
         }
       }
     } else {
@@ -248,6 +229,7 @@ export function CreateListeningQuestionModal({
       setSummaryDragChoices({ "1": "" })
       setSummaryDragOptions([""])
       setSummaryDragAnswers({})
+      setTableAnswers({})
     }
     setPhotoFile(null)
   }, [editingQuestion, copyingQuestion, isOpen])
@@ -285,6 +267,7 @@ export function CreateListeningQuestionModal({
       setColumns([""])
       setRows([{ label: "", cells: [""] }])
       setChoices({})
+      setTableAnswers({})
       setOptions([])
       setCorrectAnswers([])
       setMatchingChoices({ A: "" })
@@ -892,14 +875,10 @@ export function CreateListeningQuestionModal({
         if (formData.q_text.trim()) {
           questionData.q_text = formData.q_text
         }
-        questionData.rows = {
-          headers: summaryDragRows.some((row) => row.label.trim())
-            ? summaryDragRows.map((row) => row.label).filter((label) => label.trim())
-            : null,
-        }
-        questionData.options = summaryDragChoices
-        questionData.choices = summaryDragOptions
-        questionData.correct_answers = summaryDragAnswers
+        questionData.rows = summaryDragRows
+        questionData.choices = summaryDragChoices
+        questionData.options = summaryDragOptions
+        questionData.answers = summaryDragAnswers
 
         if (editingQuestion && !copyingQuestion) {
           await api.lQuestions.update(editingQuestion.id.toString(), questionData)
@@ -950,6 +929,7 @@ export function CreateListeningQuestionModal({
         questionData.columns = columns
         questionData.rows = rows
         questionData.choices = choices
+        questionData.answers = tableAnswers
 
         if (editingQuestion && !copyingQuestion) {
           await api.lQuestions.update(editingQuestion.id.toString(), questionData)
@@ -1065,6 +1045,7 @@ export function CreateListeningQuestionModal({
       setSummaryDragChoices({ "1": "" })
       setSummaryDragOptions([""])
       setSummaryDragAnswers({})
+      setTableAnswers({})
     } catch (error: any) {
       console.error("Failed to save listening question:", error)
       if (error.response?.data?.message) {
@@ -1596,7 +1577,7 @@ export function CreateListeningQuestionModal({
                   {rows.map((row, rowIndex) => (
                     <div key={rowIndex} className="border border-slate-600 rounded-lg p-3 space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-xs w-16">Qator {rowIndex + 1}:</span>
+                        <span className="text-slate-400 text-sm w-16">Qator {rowIndex + 1}:</span>
                         <Input
                           value={row.label}
                           onChange={(e) => handleRowLabelChange(rowIndex, e.target.value)}
@@ -1649,19 +1630,22 @@ export function CreateListeningQuestionModal({
                 <div className="space-y-2">
                   {Object.entries(choices).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-2">
-                      <Input
-                        value={key}
-                        onChange={(e) => {
-                          const newChoices = { ...choices }
-                          delete newChoices[key]
-                          if (e.target.value) {
-                            newChoices[e.target.value] = value
-                          }
-                          setChoices(newChoices)
-                        }}
-                        className="bg-slate-700/50 border-slate-600 text-white w-20"
-                        placeholder="0_2"
-                      />
+                      <Select value={key} disabled>
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-24">
+                          <SelectValue placeholder="0_0" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {Array.from({ length: rows.length }, (_, rowIdx) =>
+                            Array.from({ length: columns.length }, (_, colIdx) => `${rowIdx}_${colIdx}`),
+                          )
+                            .flat()
+                            .map((option) => (
+                              <SelectItem key={option} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                       <span className="text-slate-400">:</span>
                       <Input
                         value={value}
@@ -1675,6 +1659,9 @@ export function CreateListeningQuestionModal({
                           const newChoices = { ...choices }
                           delete newChoices[key]
                           setChoices(newChoices)
+                          const newAnswers = { ...tableAnswers }
+                          delete newAnswers[key]
+                          setTableAnswers(newAnswers)
                         }}
                         variant="ghost"
                         size="sm"
@@ -2124,7 +2111,7 @@ export function CreateListeningQuestionModal({
                     <div key={choiceKey} className="flex items-center gap-2">
                       <span className="text-slate-300 text-sm w-24">Variant {choiceKey}:</span>
                       <Select
-                        value={tfngAnswers[choiceKey] || ""}
+                        value={tfngAnswers[choiceKey] || undefined}
                         onValueChange={(value) => handleTfngAnswerChange(choiceKey, value)}
                       >
                         <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
@@ -2285,7 +2272,7 @@ export function CreateListeningQuestionModal({
                         {key}. {value}
                       </span>
                       <Select
-                        value={summaryDragAnswers[key] || ""}
+                        value={summaryDragAnswers[key] || undefined}
                         onValueChange={(val) => {
                           setSummaryDragAnswers((prev) => ({ ...prev, [key]: val }))
                         }}

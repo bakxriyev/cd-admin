@@ -35,7 +35,6 @@ export default function ListeningDetailPage() {
   const [audioLoaded, setAudioLoaded] = useState(false)
   const [selectedPart, setSelectedPart] = useState<string>("ALL")
 
-  const examId = params.id as string
   const listeningId = params.listeningId as string
 
   useEffect(() => {
