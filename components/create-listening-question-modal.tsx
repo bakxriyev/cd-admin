@@ -88,6 +88,9 @@ export function CreateListeningQuestionModal({
     const questionToLoad = editingQuestion || copyingQuestion
 
     if (questionToLoad) {
+      console.log("[v0] Loading question:", questionToLoad.q_type)
+      console.log("[v0] Question data:", questionToLoad)
+
       setFormData({
         q_type: questionToLoad.q_type,
         q_text: questionToLoad.q_text || "",
@@ -166,33 +169,74 @@ export function CreateListeningQuestionModal({
         setCorrectAnswers([])
       }
       // Load TFNG specific data
-      if (questionToLoad.q_type === "TFNG") {
+      if (questionToLoad.q_type === "TFNG" || questionToLoad.q_type === "TRUE_FALSE_NOT_GIVEN") {
         if (questionToLoad.photo) {
           setImagePreview(questionToLoad.photo)
         }
-        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
-          setTfngChoices(questionToLoad.choices)
+
+        if (questionToLoad.choices) {
+          try {
+            const parsedChoices =
+              typeof questionToLoad.choices === "string" ? JSON.parse(questionToLoad.choices) : questionToLoad.choices
+            setTfngChoices(parsedChoices)
+          } catch (e) {
+            console.error("[v0] Failed to parse TFNG choices:", e)
+          }
         }
-        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
-          setTfngOptions(questionToLoad.options)
+
+        if (questionToLoad.options) {
+          try {
+            const parsedOptions =
+              typeof questionToLoad.options === "string" ? JSON.parse(questionToLoad.options) : questionToLoad.options
+            setTfngOptions(parsedOptions)
+          } catch (e) {
+            console.error("[v0] Failed to parse TFNG options:", e)
+          }
         }
-        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          setTfngAnswers(questionToLoad.correct_answers as Record<string, string>)
+
+        if (questionToLoad.correct_answers) {
+          try {
+            const parsedAnswers =
+              typeof questionToLoad.correct_answers === "string"
+                ? JSON.parse(questionToLoad.correct_answers)
+                : questionToLoad.correct_answers
+            setTfngAnswers(parsedAnswers as Record<string, string>)
+          } catch (e) {
+            console.error("[v0] Failed to parse TFNG answers:", e)
+          }
         }
       }
 
       if (questionToLoad.q_type === "SUMMARY_DRAG") {
-        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
-          setSummaryDragRows(questionToLoad.rows)
+        // API returns: rows.headers (array), choices (array), options (object), correct_answers (object)
+        // We need to convert to: summaryDragRows (array of objects), summaryDragChoices (object), summaryDragOptions (array), summaryDragAnswers (object)
+
+        if (questionToLoad.rows && questionToLoad.rows.headers && Array.isArray(questionToLoad.rows.headers)) {
+          // Convert headers array to rows array with label and value
+          const rowsArray = questionToLoad.rows.headers.map((header: string) => ({
+            label: header,
+            value: "",
+          }))
+          setSummaryDragRows(rowsArray)
         }
-        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
-          setSummaryDragChoices(questionToLoad.choices)
+
+        if (
+          questionToLoad.options &&
+          typeof questionToLoad.options === "object" &&
+          !Array.isArray(questionToLoad.options)
+        ) {
+          // API returns options as object with row labels
+          setSummaryDragChoices(questionToLoad.options)
         }
-        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
-          setSummaryDragOptions(questionToLoad.options)
+
+        if (questionToLoad.choices && Array.isArray(questionToLoad.choices)) {
+          // API returns choices as array of available options
+          setSummaryDragOptions(questionToLoad.choices)
         }
-        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
-          setSummaryDragAnswers(questionToLoad.answers)
+
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          // API returns correct_answers as object
+          setSummaryDragAnswers(questionToLoad.correct_answers)
         }
       }
     } else {
