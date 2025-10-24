@@ -71,6 +71,10 @@ export function CreateReadingQuestionModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [tableAnswers, setTableAnswers] = useState<Record<string, string>>({})
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [tfngChoices, setTfngChoices] = useState<Record<string, string>>({})
+  const [tfngOptions, setTfngOptions] = useState<string[]>([])
+  const [tfngAnswers, setTfngAnswers] = useState<Record<string, string>>({})
 
   const countBlanks = (template: string): number => {
     return (template.match(/____/g) || []).length
@@ -171,6 +175,21 @@ export function CreateReadingQuestionModal({
         }
         if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
           setSummaryDragAnswers(questionToLoad.answers)
+        }
+      }
+
+      if (questionToLoad.q_type === "TFNG" || questionToLoad.q_type === "TRUE_FALSE_NOT_GIVEN") {
+        if (questionToLoad.photo) {
+          setImagePreview(questionToLoad.photo)
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setTfngChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setTfngOptions(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setTfngAnswers(questionToLoad.correct_answers as Record<string, string>)
         }
       }
 
@@ -503,6 +522,15 @@ export function CreateReadingQuestionModal({
         setError("Kamida bitta javobni belgilang")
         return
       }
+    } else if (formData.q_type === "MATCHING_HEADINGS") {
+      if (matchingHeadingsOptions.some((opt) => !opt.text.trim())) {
+        setError("Barcha variantlarni to'ldiring")
+        return
+      }
+      if (Object.keys(matchingHeadingsAnswers).length === 0) {
+        setError("Kamida bitta javobni belgilang")
+        return
+      }
     } else if (["MCQ_SINGLE", "MCQ_MULTI", "SENTENCE_ENDINGS"].includes(formData.q_type)) {
       if (options.some((opt) => !opt.text.trim())) {
         setError("Barcha variantlarni to'ldiring")
@@ -590,6 +618,9 @@ export function CreateReadingQuestionModal({
         questionData.options = options
         questionData.correct_answers = correctAnswers
         // Note: TFNG in reading doesn't have photo like listening, so we only save options and correct_answers
+      } else if (formData.q_type === "MATCHING_HEADINGS") {
+        questionData.options = matchingHeadingsOptions
+        questionData.answers = matchingHeadingsAnswers
       } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
         questionData.correct_answers = correctAnswers
       }
@@ -694,6 +725,7 @@ export function CreateReadingQuestionModal({
                 <SelectItem value="SENTENCE_COMPLETION">SENTENCE_COMPLETION</SelectItem>
                 <SelectItem value="TABLE_COMPLETION">TABLE_COMPLETION</SelectItem>
                 <SelectItem value="MATCHING_INFORMATION">MATCHING_INFORMATION</SelectItem>
+                <SelectItem value="MATCHING_HEADINGS">MATCHING_HEADINGS</SelectItem>
                 <SelectItem value="SUMMARY_COMPLETION">SUMMARY_COMPLETION</SelectItem>
                 <SelectItem value="SUMMARY_DRAG">SUMMARY_DRAG</SelectItem>
                 <SelectItem value="SENTENCE_ENDINGS">SENTENCE_ENDINGS</SelectItem>
