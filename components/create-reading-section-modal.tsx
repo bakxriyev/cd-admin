@@ -151,19 +151,6 @@ export function CreateReadingSectionModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="title" className="text-slate-300 text-sm">
-              Sarlavha (ixtiyoriy)
-            </Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => handleInputChange("title", e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white"
-              placeholder="Group title"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="instruction" className="text-slate-300 text-sm">
               Ko'rsatma (ixtiyoriy)
             </Label>
@@ -177,31 +164,7 @@ export function CreateReadingSectionModal({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-slate-300 text-sm">Rasm (ixtiyoriy)</Label>
-            <div className="border-2 border-dashed border-slate-600 rounded-lg p-3">
-              {photoFile ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-300 truncate">{photoFile.name}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPhotoFile(null)}
-                    className="text-red-400 hover:text-red-300 flex-shrink-0"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center cursor-pointer">
-                  <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                  <span className="text-xs text-slate-400 text-center">Rasm yuklash uchun bosing</span>
-                  <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-                </label>
-              )}
-            </div>
-          </div>
+          
 
           <div className="flex gap-2 pt-3">
             <Button

@@ -100,7 +100,9 @@ export function CreateListeningQuestionModal({
         if (typeof questionToLoad.options === "string") {
           setNoteTemplate(questionToLoad.options)
         }
-        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setNoteAnswers(questionToLoad.answers as Record<string, string>)
+        } else if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
           setNoteAnswers(questionToLoad.correct_answers as Record<string, string>)
         }
       } else if (questionToLoad.q_type === "FLOW_CHART") {
@@ -165,6 +167,8 @@ export function CreateListeningQuestionModal({
 
       if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
         setCorrectAnswers(questionToLoad.correct_answers)
+      } else if (questionToLoad.answers && Array.isArray(questionToLoad.answers)) {
+        setCorrectAnswers(questionToLoad.answers)
       } else {
         setCorrectAnswers([])
       }
@@ -208,34 +212,32 @@ export function CreateListeningQuestionModal({
       }
 
       if (questionToLoad.q_type === "SUMMARY_DRAG") {
-        // API returns: rows.headers (array), choices (array), options (object), correct_answers (object)
-        // We need to convert to: summaryDragRows (array of objects), summaryDragChoices (object), summaryDragOptions (array), summaryDragAnswers (object)
+        // API returns: rows (array of objects), choices (object), options (array), answers (object)
 
-        if (questionToLoad.rows && questionToLoad.rows.headers && Array.isArray(questionToLoad.rows.headers)) {
-          // Convert headers array to rows array with label and value
-          const rowsArray = questionToLoad.rows.headers.map((header: string) => ({
-            label: header,
-            value: "",
-          }))
-          setSummaryDragRows(rowsArray)
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          // Load rows directly as array of objects
+          setSummaryDragRows(questionToLoad.rows)
         }
 
         if (
-          questionToLoad.options &&
-          typeof questionToLoad.options === "object" &&
-          !Array.isArray(questionToLoad.options)
+          questionToLoad.choices &&
+          typeof questionToLoad.choices === "object" &&
+          !Array.isArray(questionToLoad.choices)
         ) {
-          // API returns options as object with row labels
-          setSummaryDragChoices(questionToLoad.options)
+          // Load choices as object with numbered keys
+          setSummaryDragChoices(questionToLoad.choices)
         }
 
-        if (questionToLoad.choices && Array.isArray(questionToLoad.choices)) {
-          // API returns choices as array of available options
-          setSummaryDragOptions(questionToLoad.choices)
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          // Load options as array of strings
+          setSummaryDragOptions(questionToLoad.options)
         }
 
-        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          // API returns correct_answers as object
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          // Load answers as object
+          setSummaryDragAnswers(questionToLoad.answers)
+        } else if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          // Fallback to correct_answers if answers is not available
           setSummaryDragAnswers(questionToLoad.correct_answers)
         }
       }
@@ -364,7 +366,7 @@ export function CreateListeningQuestionModal({
       setMatchingAnswers({})
       setMapPositions({})
       setImagePreview("")
-      // Removed mapType2Options reset
+      // Removed mapType2 options reset
     }
     if (value === "SUMMARY_DRAG") {
       setSummaryDragRows([
@@ -779,9 +781,17 @@ export function CreateListeningQuestionModal({
 
     // Auto-create answer fields based on number of blanks
     const blankCount = countBlanks(value)
+    const currentAnswerKeys = Object.keys(noteAnswers)
     const newAnswers: Record<string, string> = {}
+
+    // Add existing answers if they are still relevant (i.e., within the new blank count)
     for (let i = 1; i <= blankCount; i++) {
-      newAnswers[i.toString()] = noteAnswers[i.toString()] || ""
+      const key = i.toString()
+      if (currentAnswerKeys.includes(key)) {
+        newAnswers[key] = noteAnswers[key]
+      } else {
+        newAnswers[key] = ""
+      }
     }
     setNoteAnswers(newAnswers)
   }
@@ -810,6 +820,11 @@ export function CreateListeningQuestionModal({
         setError("Shablonni to'ldiring")
         return
       }
+      const emptyAnswers = Object.entries(noteAnswers).filter(([_, value]) => !value.trim())
+      if (emptyAnswers.length > 0) {
+        setError("Barcha javoblarni to'ldiring. Bo'sh javoblar mavjud!")
+        return
+      }
     } else if (formData.q_type === "FLOW_CHART") {
       if (Object.values(flowChartChoices).some((choice) => !choice.trim())) {
         setError("Barcha tanlov variantlarini to'ldiring")
@@ -817,6 +832,10 @@ export function CreateListeningQuestionModal({
       }
       if (flowChartOptions.some((opt) => !opt.trim())) {
         setError("Barcha variantlarni to'ldiring")
+        return
+      }
+      if (Object.keys(flowChartAnswers).length === 0) {
+        setError("Kamida bitta javobni belgilang")
         return
       }
     } else if (formData.q_type === "MATCHING_INFORMATION") {
@@ -906,19 +925,11 @@ export function CreateListeningQuestionModal({
         q_type: formData.q_type,
       }
 
-      if (formData.q_type !== "NOTE_COMPLETION" && formData.q_type !== "SUMMARY_DRAG") {
-        if (!formData.q_text.trim()) {
-          setError("Savol matni majburiy")
-          setLoading(false)
-          return
-        }
+      if (formData.q_text && formData.q_text.trim()) {
         questionData.q_text = formData.q_text
       }
 
       if (formData.q_type === "SUMMARY_DRAG") {
-        if (formData.q_text.trim()) {
-          questionData.q_text = formData.q_text
-        }
         questionData.rows = summaryDragRows
         questionData.choices = summaryDragChoices
         questionData.options = summaryDragOptions
@@ -933,13 +944,9 @@ export function CreateListeningQuestionModal({
         const formDataWithFile = new FormData()
         formDataWithFile.append("listening_questions_id", listeningQuestionsId)
         formDataWithFile.append("q_type", "TFNG")
-        // TFNG requires q_text
-        if (!formData.q_text.trim()) {
-          setError("Savol matni majburiy")
-          setLoading(false)
-          return
+        if (formData.q_text && formData.q_text.trim()) {
+          formDataWithFile.append("q_text", formData.q_text)
         }
-        formDataWithFile.append("q_text", formData.q_text)
         formDataWithFile.append("photo", tfngPhoto!)
         formDataWithFile.append("choices", JSON.stringify(tfngChoices))
         formDataWithFile.append("options", JSON.stringify(tfngOptions))
@@ -990,7 +997,9 @@ export function CreateListeningQuestionModal({
         const formDataWithFile = new FormData()
         formDataWithFile.append("listening_questions_id", listeningQuestionsId)
         formDataWithFile.append("q_type", formData.q_type)
-        formDataWithFile.append("q_text", formData.q_text)
+        if (formData.q_text && formData.q_text.trim()) {
+          formDataWithFile.append("q_text", formData.q_text)
+        }
         if (photoFile) {
           formDataWithFile.append("photo", photoFile)
         }
@@ -1181,7 +1190,7 @@ export function CreateListeningQuestionModal({
           {formData.q_type !== "NOTE_COMPLETION" && (
             <div className="space-y-2">
               <Label htmlFor="q_text" className="text-slate-300 text-sm">
-                Savol Matni *
+                Savol Matni (ixtiyoriy)
               </Label>
               <Textarea
                 id="q_text"
@@ -1190,7 +1199,6 @@ export function CreateListeningQuestionModal({
                 className="bg-slate-700/50 border-slate-600 text-white resize-y"
                 placeholder="What is the speaker's main point? (MAP turi uchun ___ belgilarini ishlating)"
                 rows={2}
-                required
               />
               {formData.q_type === "MAP_LABELING" && (
                 <p className="text-xs text-slate-400">
