@@ -266,7 +266,21 @@ export function CreateReadingQuestionModal({
         q_text: questionToLoad.q_text || "",
       })
 
-      if (questionToLoad.q_type === "SENTENCE_ENDINGS") {
+      if (questionToLoad.q_type === "TFNG") {
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setOptions(questionToLoad.options)
+        } else {
+          // Set default TFNG options if not present
+          setOptions([
+            { key: "A", text: "TRUE" },
+            { key: "B", text: "FALSE" },
+            { key: "C", text: "NOT GIVEN" },
+          ])
+        }
+        if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
+          setCorrectAnswers(questionToLoad.correct_answers)
+        }
+      } else if (questionToLoad.q_type === "SENTENCE_ENDINGS") {
         if (
           questionToLoad.options &&
           typeof questionToLoad.options === "object" &&
@@ -398,7 +412,14 @@ export function CreateReadingQuestionModal({
   const handleQuestionTypeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, q_type: value as ReadingQuestion["q_type"] }))
 
-    if (value === "NOTE_COMPLETION") {
+    if (value === "TFNG") {
+      setOptions([
+        { key: "A", text: "TRUE" },
+        { key: "B", text: "FALSE" },
+        { key: "C", text: "NOT GIVEN" },
+      ])
+      setCorrectAnswers([])
+    } else if (value === "NOTE_COMPLETION") {
       setNoteTemplate("")
       setNoteAnswers({})
     } else if (value === "SENTENCE_ENDINGS") {
@@ -651,7 +672,16 @@ export function CreateReadingQuestionModal({
     e.preventDefault()
     if (!readingQuestionsId) return
 
-    if (formData.q_type === "TABLE_COMPLETION") {
+    if (formData.q_type === "TFNG") {
+      if (!formData.q_text.trim()) {
+        setError("Savol matnini kiriting")
+        return
+      }
+      if (correctAnswers.length === 0) {
+        setError("To'g'ri javobni belgilang (TRUE, FALSE yoki NOT GIVEN)")
+        return
+      }
+    } else if (formData.q_type === "TABLE_COMPLETION") {
       if (columns.slice(1).length === 0 || rows.length === 0) {
         // Skip corner label for column check
         setError("Jadvalda kamida bitta ustun va qator bo'lishi kerak")
@@ -758,7 +788,10 @@ export function CreateReadingQuestionModal({
         questionData.q_text = formData.q_text
       }
 
-      if (formData.q_type === "SENTENCE_ENDINGS") {
+      if (formData.q_type === "TFNG") {
+        questionData.options = options // [{key: "A", text: "TRUE"}, {key: "B", text: "FALSE"}, {key: "C", text: "NOT GIVEN"}]
+        questionData.correct_answers = correctAnswers // ["A"] or ["B"] or ["C"]
+      } else if (formData.q_type === "SENTENCE_ENDINGS") {
         questionData.options = sentenceEndingsOptions
         questionData.choices = sentenceEndingsChoices
         questionData.answers = sentenceEndingsAnswers
@@ -783,8 +816,8 @@ export function CreateReadingQuestionModal({
         questionData.answers = matchingAnswers
       } else if (formData.q_type === "MATCHING_HEADINGS") {
         questionData.options = matchingHeadingsOptions.map((opt) => opt.text)
+        questionData.answers = matchingHeadingsAnswers // Changed from correct_answers to answers
         questionData.rows = Array.from({ length: matchingHeadingsInputCount }, (_, i) => `Input ${i + 1}`)
-        questionData.correct_answers = matchingHeadingsAnswers
       } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
         questionData.correct_answers = correctAnswers
       }
@@ -809,6 +842,7 @@ export function CreateReadingQuestionModal({
     }
   }
 
+  const isTfng = formData.q_type === "TFNG"
   const isSentenceEndings = formData.q_type === "SENTENCE_ENDINGS"
   const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
   const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
@@ -846,6 +880,7 @@ export function CreateReadingQuestionModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-slate-700 border-slate-600">
+                <SelectItem value="TFNG">TRUE_FALSE_NOT_GIVEN</SelectItem>
                 <SelectItem value="MCQ_SINGLE">MULTIPLE_CHOICE_SINGLE</SelectItem>
                 <SelectItem value="MCQ_MULTI">MULTIPLE_CHOICE_MULTI</SelectItem>
                 <SelectItem value="SENTENCE_COMPLETION">SENTENCE_COMPLETION</SelectItem>
@@ -872,6 +907,55 @@ export function CreateReadingQuestionModal({
               placeholder="Savol matni (ixtiyoriy)"
             />
           </div>
+
+          {isTfng && (
+            <div className="space-y-4">
+              <div className="bg-blue-900/20 border border-blue-700/30 rounded p-3">
+                <p className="text-blue-300 text-xs">
+                  <span className="font-semibold">TFNG savol turi:</span> Savol matniga statement yozing va to'g'ri
+                  javobni (TRUE, FALSE yoki NOT GIVEN) belgilang.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Javob Variantlari *</Label>
+                <div className="space-y-2">
+                  {options.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <span className="text-slate-300 font-mono text-sm w-4">{option.key}:</span>
+                      <Input
+                        value={option.text}
+                        readOnly
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1 cursor-not-allowed"
+                        placeholder={`Option ${option.key}`}
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => handleCorrectAnswerToggle(option.key)}
+                        variant={correctAnswers.includes(option.key) ? "default" : "outline"}
+                        size="sm"
+                        className={
+                          correctAnswers.includes(option.key)
+                            ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7"
+                            : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7"
+                        }
+                      >
+                        {correctAnswers.includes(option.key) ? "To'g'ri" : "Belgilash"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {correctAnswers.length > 0 && (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-3">
+                  <p className="text-green-400 text-sm font-semibold">
+                    To'g'ri javob: {correctAnswers[0]} ({options.find((opt) => opt.key === correctAnswers[0])?.text})
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Conditionally render options based on q_type */}
           {["MCQ_SINGLE", "MCQ_MULTI", "SUMMARY_COMPLETION"].includes(formData.q_type) && (
