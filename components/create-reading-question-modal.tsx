@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { api, type ReadingQuestion, type Passage } from "@/lib/api"
+import { api, type ReadingQuestion } from "@/lib/api"
 import { Plus, X, HelpCircle } from "lucide-react"
 
 const QUESTION_TYPES = {
@@ -18,11 +18,13 @@ const QUESTION_TYPES = {
   SENTENCE_COMPLETION: "SENTENCE_COMPLETION",
   TABLE_COMPLETION: "TABLE_COMPLETION",
   MATCHING_INFORMATION: "MATCHING_INFORMATION",
+  MATCHING_HEADINGS: "MATCHING_HEADINGS",
   SUMMARY_COMPLETION: "SUMMARY_COMPLETION",
   SUMMARY_DRAG: "SUMMARY_DRAG",
   SENTENCE_ENDINGS: "SENTENCE_ENDINGS",
-  MATCHING_HEADINGS: "MATCHING_HEADINGS",
+  FLOW_CHART: "FLOW_CHART",
   NOTE_COMPLETION: "NOTE_COMPLETION",
+  MAP_LABELING: "MAP_LABELING",
 }
 
 interface CreateReadingQuestionModalProps {
@@ -32,7 +34,6 @@ interface CreateReadingQuestionModalProps {
   onQuestionCreated: () => void
   editingQuestion?: ReadingQuestion | null
   copyingQuestion?: ReadingQuestion | null
-  passages?: Passage[]
 }
 
 export function CreateReadingQuestionModal({
@@ -42,17 +43,19 @@ export function CreateReadingQuestionModal({
   onQuestionCreated,
   editingQuestion,
   copyingQuestion,
-  passages = [],
 }: CreateReadingQuestionModalProps) {
   const [formData, setFormData] = useState({
     q_type: "MCQ_SINGLE" as ReadingQuestion["q_type"],
     q_text: "",
-    photo: "",
   })
   const [options, setOptions] = useState([{ key: "A", text: "" }])
   const [correctAnswers, setCorrectAnswers] = useState<string[]>([])
-  const [columns, setColumns] = useState<string[]>([""])
-  const [rows, setRows] = useState<Array<{ label: string; cells: string[] }>>([{ label: "", cells: [""] }])
+  const [columns, setColumns] = useState<string[]>(["", "", ""]) // First element is corner label, rest are column headers
+  const [rows, setRows] = useState<Array<{ label: string; cells: string[] }>>([{ label: "", cells: ["", ""] }])
+  const [detectedBlanks, setDetectedBlanks] = useState<
+    Array<{ type: string; row?: number; col?: number; key: string; blankIndex?: number; displayLabel?: string }>
+  >([])
+  const [blankAnswers, setBlankAnswers] = useState<Record<string, string>>({})
   const [choices, setChoices] = useState<Record<string, string>>({})
   const [matchingChoices, setMatchingChoices] = useState<Record<string, string>>({ A: "" })
   const [matchingRows, setMatchingRows] = useState<string[]>([""])
@@ -64,20 +67,119 @@ export function CreateReadingQuestionModal({
   const [matchingHeadingsAnswers, setMatchingHeadingsAnswers] = useState<Record<string, string>>({})
   const [noteTemplate, setNoteTemplate] = useState("")
   const [noteAnswers, setNoteAnswers] = useState<Record<string, string>>({})
-  const [summaryDragRows, setSummaryDragRows] = useState<string[]>([""])
-  const [summaryDragChoices, setSummaryDragChoices] = useState<Record<string, string>>({})
+  const [summaryDragRows, setSummaryDragRows] = useState<Array<{ label: string; value: string }>>([
+    { label: "People", value: "" },
+    { label: "Staff Responsibilities", value: "" },
+  ])
+  const [summaryDragChoices, setSummaryDragChoices] = useState<Record<string, string>>({ "1": "" })
   const [summaryDragOptions, setSummaryDragOptions] = useState<string[]>([""])
   const [summaryDragAnswers, setSummaryDragAnswers] = useState<Record<string, string>>({})
+
+  const [sentenceEndingsOptions, setSentenceEndingsOptions] = useState<Record<string, string>>({})
+  const [sentenceEndingsChoices, setSentenceEndingsChoices] = useState<Record<string, string>>({})
+  const [sentenceEndingsAnswers, setSentenceEndingsAnswers] = useState<Record<string, string>>({})
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [tableAnswers, setTableAnswers] = useState<Record<string, string>>({})
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [tfngChoices, setTfngChoices] = useState<Record<string, string>>({})
-  const [tfngOptions, setTfngOptions] = useState<string[]>([])
-  const [tfngAnswers, setTfngAnswers] = useState<Record<string, string>>({})
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
 
   const countBlanks = (template: string): number => {
     return (template.match(/____/g) || []).length
+  }
+
+  const detectBlanksInTable = (tableColumns: string[], tableRows: Array<{ label: string; cells: string[] }>) => {
+    const blanks: Array<{
+      type: string
+      row?: number
+      col?: number
+      key: string
+      blankIndex?: number
+      displayLabel?: string
+    }> = []
+
+    // Row 0 = header row (corner + columns)
+    // Row 1+ = data rows
+    // Column 0 = labels column (corner + row labels)
+    // Column 1+ = data columns
+
+    // Check corner label (columns[0]) - position [0,0]
+    const cornerLabel = tableColumns[0] || ""
+    const cornerMatches = cornerLabel.match(/____/g) || []
+    cornerMatches.forEach((_, blankIdx) => {
+      const key = `0_0_${blankIdx + 1}`
+      blanks.push({
+        type: "corner",
+        row: 0,
+        col: 0,
+        key,
+        blankIndex: blankIdx + 1,
+        displayLabel: `Burchak [0,0] (Bo'sh joy #${blankIdx + 1})`,
+      })
+    })
+
+    // Check column headers (columns[1+]) - position [0, columnIndex]
+    tableColumns.slice(1).forEach((col, idx) => {
+      const colIndex = idx + 1 // Real column index (1, 2, 3, ...)
+      const blankMatches = col.match(/____/g) || []
+      blankMatches.forEach((_, blankIdx) => {
+        const key = `0_${colIndex}_${blankIdx + 1}`
+        blanks.push({
+          type: "column",
+          row: 0,
+          col: colIndex,
+          key,
+          blankIndex: blankIdx + 1,
+          displayLabel: `Ustun [0,${colIndex}] (Bo'sh joy #${blankIdx + 1})`,
+        })
+      })
+    })
+
+    // Check row labels and cells
+    tableRows.forEach((row, rowIdx) => {
+      const rowIndex = rowIdx + 1 // Real row index (1, 2, 3, ...)
+
+      // Check row label - position [rowIndex, 0]
+      const rowLabelMatches = row.label.match(/____/g) || []
+      rowLabelMatches.forEach((_, blankIdx) => {
+        const key = `${rowIndex}_0_${blankIdx + 1}`
+        blanks.push({
+          type: "row",
+          row: rowIndex,
+          col: 0,
+          key,
+          blankIndex: blankIdx + 1,
+          displayLabel: `Qator [${rowIndex},0] (Bo'sh joy #${blankIdx + 1})`,
+        })
+      })
+
+      // Check cells - position [rowIndex, columnIndex]
+      row.cells.forEach((cell, cellIdx) => {
+        const colIndex = cellIdx + 1 // Real column index (1, 2, 3, ...)
+        const cellMatches = cell.match(/____/g) || []
+        cellMatches.forEach((_, blankIdx) => {
+          const key = `${rowIndex}_${colIndex}_${blankIdx + 1}`
+          blanks.push({
+            type: "cell",
+            row: rowIndex,
+            col: colIndex,
+            key,
+            blankIndex: blankIdx + 1,
+            displayLabel: `Hujayra [${rowIndex},${colIndex}] (Bo'sh joy #${blankIdx + 1})`,
+          })
+        })
+      })
+    })
+
+    setDetectedBlanks(blanks)
+
+    // Preserve existing answers, add new blank entries
+    const newAnswers: Record<string, string> = {}
+    blanks.forEach((blank) => {
+      newAnswers[blank.key] = blankAnswers[blank.key] || ""
+    })
+    setBlankAnswers(newAnswers)
   }
 
   const handleNoteTemplateChange = (value: string) => {
@@ -92,18 +194,66 @@ export function CreateReadingQuestionModal({
       }
       setNoteAnswers(newAnswers)
     } else if (blankCount < currentAnswerCount) {
-      const newAnswers: Record<string, string> = {}
-      for (let i = 1; i <= blankCount; i++) {
-        newAnswers[i.toString()] = noteAnswers[i.toString()] || ""
+      const newAnswers = { ...noteAnswers }
+      for (let i = blankCount + 1; i <= currentAnswerCount; i++) {
+        delete newAnswers[i.toString()]
       }
       setNoteAnswers(newAnswers)
     }
   }
 
   const handleNoteAnswerChange = (key: string, value: string) => {
-    setNoteAnswers((prev) => ({
+    setNoteAnswers((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSentenceEndingsOptionChange = (key: string, value: string) => {
+    setSentenceEndingsOptions((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleAddSentenceEndingsOption = () => {
+    const nextKey = (Object.keys(sentenceEndingsOptions).length + 1).toString()
+    setSentenceEndingsOptions((prev) => ({ ...prev, [nextKey]: "" }))
+  }
+
+  const handleRemoveSentenceEndingsOption = (key: string) => {
+    if (Object.keys(sentenceEndingsOptions).length > 1) {
+      const newOptions = { ...sentenceEndingsOptions }
+      delete newOptions[key]
+      setSentenceEndingsOptions(newOptions)
+      const newAnswers = { ...sentenceEndingsAnswers }
+      delete newAnswers[key]
+      setSentenceEndingsAnswers(newAnswers)
+    }
+  }
+
+  const handleSentenceEndingsChoiceChange = (key: string, value: string) => {
+    setSentenceEndingsChoices((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleAddSentenceEndingsChoice = () => {
+    const nextKey = String.fromCharCode(65 + Object.keys(sentenceEndingsChoices).length)
+    setSentenceEndingsChoices((prev) => ({ ...prev, [nextKey]: "" }))
+  }
+
+  const handleRemoveSentenceEndingsChoice = (key: string) => {
+    if (Object.keys(sentenceEndingsChoices).length > 1) {
+      const newChoices = { ...sentenceEndingsChoices }
+      delete newChoices[key]
+      setSentenceEndingsChoices(newChoices)
+      const newAnswers = { ...sentenceEndingsAnswers }
+      Object.keys(newAnswers).forEach((answerKey) => {
+        if (newAnswers[answerKey] === key) {
+          delete newAnswers[answerKey]
+        }
+      })
+      setSentenceEndingsAnswers(newAnswers)
+    }
+  }
+
+  const handleSentenceEndingsAnswerChange = (optionKey: string, choiceKey: string) => {
+    setSentenceEndingsAnswers((prev) => ({
       ...prev,
-      [key]: value,
+      [optionKey]: choiceKey,
     }))
   }
 
@@ -114,10 +264,75 @@ export function CreateReadingQuestionModal({
       setFormData({
         q_type: questionToLoad.q_type,
         q_text: questionToLoad.q_text || "",
-        photo: questionToLoad.photo || "",
       })
 
-      if (questionToLoad.q_type === "MATCHING_INFORMATION") {
+      if (questionToLoad.q_type === "SENTENCE_ENDINGS") {
+        if (
+          questionToLoad.options &&
+          typeof questionToLoad.options === "object" &&
+          !Array.isArray(questionToLoad.options)
+        ) {
+          setSentenceEndingsOptions(questionToLoad.options as Record<string, string>)
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setSentenceEndingsChoices(questionToLoad.choices as Record<string, string>)
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setSentenceEndingsAnswers(questionToLoad.answers as Record<string, string>)
+        }
+      } else if (questionToLoad.q_type === "NOTE_COMPLETION") {
+        if (typeof questionToLoad.options === "string") {
+          setNoteTemplate(questionToLoad.options)
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setNoteAnswers(questionToLoad.answers as Record<string, string>)
+        } else if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
+          setNoteAnswers(questionToLoad.correct_answers as Record<string, string>)
+        }
+      } else if (questionToLoad.q_type === "SUMMARY_DRAG") {
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setSummaryDragRows(questionToLoad.rows as Array<{ label: string; value: string }>)
+        }
+        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
+          setSummaryDragChoices(questionToLoad.choices)
+        }
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setSummaryDragOptions(questionToLoad.options)
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setSummaryDragAnswers(questionToLoad.answers)
+        }
+      } else if (["MCQ_SINGLE", "MCQ_MULTI"].includes(questionToLoad.q_type)) {
+        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
+          setOptions(questionToLoad.options)
+        }
+        if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
+          setCorrectAnswers(questionToLoad.correct_answers)
+        }
+      } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
+        if (questionToLoad.columns && Array.isArray(questionToLoad.columns)) {
+          setColumns(questionToLoad.columns.length > 0 ? questionToLoad.columns : ["", "", ""])
+        } else {
+          setColumns(["", "", ""])
+        }
+
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setRows(questionToLoad.rows)
+        } else {
+          setRows([{ label: "", cells: ["", ""] }])
+        }
+
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setBlankAnswers(questionToLoad.answers as Record<string, string>)
+        }
+
+        if (questionToLoad.columns && questionToLoad.rows) {
+          setTimeout(() => {
+            const actualColumns = questionToLoad.columns!.slice(1)
+            detectBlanksInTable(actualColumns, questionToLoad.rows as Array<{ label: string; cells: string[] }>)
+          }, 100)
+        }
+      } else if (questionToLoad.q_type === "MATCHING_INFORMATION") {
         if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
           setMatchingChoices(questionToLoad.choices)
         }
@@ -128,89 +343,31 @@ export function CreateReadingQuestionModal({
           setMatchingAnswers(questionToLoad.answers)
         }
       } else if (questionToLoad.q_type === "MATCHING_HEADINGS") {
-        if (questionToLoad.options) {
-          if (Array.isArray(questionToLoad.options)) {
-            setMatchingHeadingsOptions(questionToLoad.options)
-          } else if (typeof questionToLoad.options === "object") {
-            const optionsArray = Object.entries(questionToLoad.options).map(([key, text], index) => ({
-              key: String.fromCharCode(65 + index),
-              text: text as string,
-            }))
-            setMatchingHeadingsOptions(optionsArray)
-          }
-        }
-        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
-          setMatchingHeadingsAnswers(questionToLoad.answers)
-          const inputCount = Object.keys(questionToLoad.answers).length
-          setMatchingHeadingsInputCount(inputCount > 0 ? inputCount : 1)
-        }
-      } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
-        setColumns(questionToLoad.columns || [])
-        setRows(questionToLoad.rows || [])
-        setChoices(questionToLoad.choices || {})
-        setTableAnswers(questionToLoad.answers || {})
-      } else if (["MCQ_SINGLE", "MCQ_MULTI", "SENTENCE_ENDINGS"].includes(questionToLoad.q_type)) {
         if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
-          setOptions(questionToLoad.options)
-        } else {
-          setOptions([{ key: "A", text: "" }])
+          const headingsOptions = questionToLoad.options.map((text, index) => ({
+            key: String.fromCharCode(65 + index),
+            text,
+          }))
+          setMatchingHeadingsOptions(headingsOptions)
         }
-      } else if (questionToLoad.q_type === "NOTE_COMPLETION") {
-        if (typeof questionToLoad.options === "string") {
-          setNoteTemplate(questionToLoad.options)
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          setMatchingHeadingsInputCount(questionToLoad.rows.length)
         }
         if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          setNoteAnswers(questionToLoad.correct_answers as Record<string, string>)
+          setMatchingHeadingsAnswers(questionToLoad.correct_answers as Record<string, string>)
         }
-      }
-      if (questionToLoad.q_type === "SUMMARY_DRAG") {
-        // API returns options as string (text with underscores), choices as object, answers as object
-        if (questionToLoad.options && typeof questionToLoad.options === "string") {
-          // Convert options string to array of rows
-          setSummaryDragRows([questionToLoad.options])
-        }
-        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
-          setSummaryDragChoices(questionToLoad.choices)
-          // Extract values from choices object to create options array
-          const optionsArray = Object.values(questionToLoad.choices)
-          setSummaryDragOptions(optionsArray as string[])
-        }
-        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
-          setSummaryDragAnswers(questionToLoad.answers)
-        }
-      }
-
-      if (questionToLoad.q_type === "TFNG" || questionToLoad.q_type === "TRUE_FALSE_NOT_GIVEN") {
-        if (questionToLoad.photo) {
-          setImagePreview(questionToLoad.photo)
-        }
-        if (questionToLoad.choices && typeof questionToLoad.choices === "object") {
-          setTfngChoices(questionToLoad.choices)
-        }
-        if (questionToLoad.options && Array.isArray(questionToLoad.options)) {
-          setTfngOptions(questionToLoad.options)
-        }
-        if (questionToLoad.correct_answers && typeof questionToLoad.correct_answers === "object") {
-          setTfngAnswers(questionToLoad.correct_answers as Record<string, string>)
-        }
-      }
-
-      if (questionToLoad.correct_answers && Array.isArray(questionToLoad.correct_answers)) {
-        setCorrectAnswers(questionToLoad.correct_answers)
-      } else {
-        setCorrectAnswers([])
       }
     } else {
       setFormData({
         q_type: "MCQ_SINGLE",
         q_text: "",
-        photo: "",
       })
       setOptions([{ key: "A", text: "" }])
       setCorrectAnswers([])
-      setColumns([""])
-      setRows([{ label: "", cells: [""] }])
-      setChoices({})
+      setColumns(["", "", ""])
+      setRows([{ label: "", cells: ["", ""] }])
+      setBlankAnswers({})
+      setDetectedBlanks([])
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
@@ -219,10 +376,18 @@ export function CreateReadingQuestionModal({
       setMatchingHeadingsAnswers({})
       setNoteTemplate("")
       setNoteAnswers({})
-      setSummaryDragRows(["", ""])
-      setSummaryDragChoices({})
+      setSummaryDragRows([
+        { label: "People", value: "" },
+        { label: "Staff Responsibilities", value: "" },
+      ])
+      setSummaryDragChoices({ "1": "" })
       setSummaryDragOptions([""])
       setSummaryDragAnswers({})
+      setSentenceEndingsOptions({})
+      setSentenceEndingsChoices({})
+      setSentenceEndingsAnswers({})
+      setImagePreview(null)
+      setPhotoFile(null)
     }
   }, [editingQuestion, copyingQuestion, isOpen])
 
@@ -230,35 +395,58 @@ export function CreateReadingQuestionModal({
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleQuestionTypeChange = (type: string) => {
-    setFormData((prev) => ({ ...prev, q_type: type }))
-    setOptions([{ key: "A", text: "" }])
-    setCorrectAnswers([])
-    setColumns([""])
-    setRows([{ label: "", cells: [""] }])
-    setChoices({})
-    setMatchingChoices({ A: "" })
-    setMatchingRows([""])
-    setMatchingAnswers({})
-    setMatchingHeadingsOptions([{ key: "A", text: "" }])
-    setMatchingHeadingsInputCount(1)
-    setMatchingHeadingsAnswers({})
-    setNoteTemplate("")
-    setNoteAnswers({})
-    setSummaryDragRows(["", ""])
-    setSummaryDragChoices({})
-    setSummaryDragOptions([""])
-    setSummaryDragAnswers({})
+  const handleQuestionTypeChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, q_type: value as ReadingQuestion["q_type"] }))
+
+    if (value === "NOTE_COMPLETION") {
+      setNoteTemplate("")
+      setNoteAnswers({})
+    } else if (value === "SENTENCE_ENDINGS") {
+      setSentenceEndingsOptions({})
+      setSentenceEndingsChoices({})
+      setSentenceEndingsAnswers({})
+    } else if (value === "SUMMARY_DRAG") {
+      setSummaryDragRows([
+        { label: "People", value: "" },
+        { label: "Staff Responsibilities", value: "" },
+      ])
+      setSummaryDragChoices({ "1": "" })
+      setSummaryDragOptions([""])
+      setSummaryDragAnswers({})
+    } else if (value === "TABLE_COMPLETION") {
+      setColumns(["", "", ""])
+      setRows([{ label: "", cells: ["", ""] }])
+      setBlankAnswers({})
+      setDetectedBlanks([])
+    } else if (value === "MATCHING_INFORMATION") {
+      setMatchingChoices({ A: "" })
+      setMatchingRows([""])
+      setMatchingAnswers({})
+    } else if (value === "MATCHING_HEADINGS") {
+      setMatchingHeadingsOptions([{ key: "A", text: "" }])
+      setMatchingHeadingsInputCount(1)
+      setMatchingHeadingsAnswers({})
+    } else if (["MCQ_SINGLE", "MCQ_MULTI"].includes(value)) {
+      setOptions([{ key: "A", text: "" }])
+      setCorrectAnswers([])
+    }
+  }
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhotoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
   }
 
   const handleAddOption = () => {
-    if (formData.q_type === "MATCHING_HEADINGS") {
-      const nextKey = (options.length + 1).toString()
-      setOptions([...options, { key: nextKey, text: "" }])
-    } else {
-      const nextKey = String.fromCharCode(65 + options.length) // A, B, C, D...
-      setOptions([...options, { key: nextKey, text: "" }])
-    }
+    const nextKey = String.fromCharCode(65 + options.length)
+    setOptions([...options, { key: nextKey, text: "" }])
   }
 
   const handleRemoveOption = (index: number) => {
@@ -266,10 +454,9 @@ export function CreateReadingQuestionModal({
       const newOptions = options.filter((_, i) => i !== index)
       const reassignedOptions = newOptions.map((option, i) => ({
         ...option,
-        key: formData.q_type === "MATCHING_HEADINGS" ? (i + 1).toString() : String.fromCharCode(65 + i),
+        key: String.fromCharCode(65 + i),
       }))
       setOptions(reassignedOptions)
-
       const removedKey = options[index].key
       setCorrectAnswers(correctAnswers.filter((answer) => answer !== removedKey))
     }
@@ -282,7 +469,7 @@ export function CreateReadingQuestionModal({
   }
 
   const handleCorrectAnswerToggle = (key: string) => {
-    if (formData.q_type === "MCQ_SINGLE" || formData.q_type === "TFNG") {
+    if (formData.q_type === "MCQ_SINGLE") {
       setCorrectAnswers([key])
     } else {
       setCorrectAnswers((prev) => (prev.includes(key) ? prev.filter((answer) => answer !== key) : [...prev, key]))
@@ -308,7 +495,6 @@ export function CreateReadingQuestionModal({
   const handleAddColumn = () => {
     const newColumns = [...columns, ""]
     setColumns(newColumns)
-
     const newRows = rows.map((row) => ({
       ...row,
       cells: [...row.cells, ""],
@@ -317,57 +503,42 @@ export function CreateReadingQuestionModal({
   }
 
   const handleRemoveColumn = (index: number) => {
-    if (columns.length > 1) {
-      const newColumns = columns.filter((_, i) => i !== index)
-      setColumns(newColumns)
+    if (index === 0 || columns.length <= 2) return
 
-      const newRows = rows.map((row) => ({
-        ...row,
-        cells: row.cells.filter((_, i) => i !== index),
-      }))
-      setRows(newRows)
+    const newColumns = columns.filter((_, i) => i !== index)
+    setColumns(newColumns)
 
-      const newChoices = { ...choices }
-      Object.keys(newChoices).forEach((key) => {
-        const [rowIndex, colIndex] = key.split("_").map(Number)
-        if (colIndex === index) {
-          delete newChoices[key]
-        } else if (colIndex > index) {
-          const newKey = `${rowIndex}_${colIndex - 1}`
-          newChoices[newKey] = newChoices[key]
-          delete newChoices[key]
-        }
-      })
-      setChoices(newChoices)
-    }
+    // Adjust cell index (subtract 1 because columns[0] is corner label)
+    const cellIndex = index - 1
+    const newRows = rows.map((row) => ({
+      ...row,
+      cells: row.cells.filter((_, i) => i !== cellIndex),
+    }))
+    setRows(newRows)
+
+    // Detect blanks with actual columns (skip corner label)
+    detectBlanksInTable(newColumns.slice(1), newRows)
   }
 
   const handleColumnChange = (index: number, value: string) => {
     const newColumns = [...columns]
     newColumns[index] = value
     setColumns(newColumns)
+
+    if (index > 0) {
+      detectBlanksInTable(newColumns.slice(1), rows)
+    }
   }
 
   const handleAddRow = () => {
-    setRows([...rows, { label: "", cells: new Array(columns.length).fill("") }])
+    setRows([...rows, { label: "", cells: new Array(columns.length - 1).fill("") }])
   }
 
   const handleRemoveRow = (index: number) => {
     if (rows.length > 1) {
-      setRows(rows.filter((_, i) => i !== index))
-
-      const newChoices = { ...choices }
-      Object.keys(newChoices).forEach((key) => {
-        const [rowIndex, colIndex] = key.split("_").map(Number)
-        if (rowIndex === index) {
-          delete newChoices[key]
-        } else if (rowIndex > index) {
-          const newKey = `${rowIndex - 1}_${colIndex}`
-          newChoices[newKey] = newChoices[key]
-          delete newChoices[key]
-        }
-      })
-      setChoices(newChoices)
+      const newRows = rows.filter((_, i) => i !== index)
+      setRows(newRows)
+      detectBlanksInTable(columns.slice(1), newRows) // Pass actual columns
     }
   }
 
@@ -375,12 +546,18 @@ export function CreateReadingQuestionModal({
     const newRows = [...rows]
     newRows[rowIndex].label = value
     setRows(newRows)
+    detectBlanksInTable(columns.slice(1), newRows) // Pass actual columns
   }
 
   const handleRowCellChange = (rowIndex: number, cellIndex: number, value: string) => {
     const newRows = [...rows]
     newRows[rowIndex].cells[cellIndex] = value
     setRows(newRows)
+    detectBlanksInTable(columns.slice(1), newRows) // Pass actual columns
+  }
+
+  const handleBlankAnswerChange = (key: string, value: string) => {
+    setBlankAnswers((prev) => ({ ...prev, [key]: value }))
   }
 
   const handleChoiceChange = (key: string, value: string) => {
@@ -389,7 +566,7 @@ export function CreateReadingQuestionModal({
 
   const handleAddMatchingChoice = () => {
     const keys = Object.keys(matchingChoices)
-    const nextKey = String.fromCharCode(65 + keys.length) // A, B, C, D...
+    const nextKey = String.fromCharCode(65 + keys.length)
     setMatchingChoices((prev) => ({ ...prev, [nextKey]: "" }))
   }
 
@@ -398,14 +575,6 @@ export function CreateReadingQuestionModal({
       const newChoices = { ...matchingChoices }
       delete newChoices[key]
       setMatchingChoices(newChoices)
-
-      const newAnswers = { ...matchingAnswers }
-      Object.keys(newAnswers).forEach((answerKey) => {
-        if (newAnswers[answerKey] === key) {
-          delete newAnswers[answerKey]
-        }
-      })
-      setMatchingAnswers(newAnswers)
     }
   }
 
@@ -420,20 +589,6 @@ export function CreateReadingQuestionModal({
   const handleRemoveMatchingRow = (index: number) => {
     if (matchingRows.length > 1) {
       setMatchingRows((prev) => prev.filter((_, i) => i !== index))
-
-      const newAnswers = { ...matchingAnswers }
-      delete newAnswers[(index + 1).toString()]
-
-      const shiftedAnswers: Record<string, string> = {}
-      Object.keys(newAnswers).forEach((key) => {
-        const numKey = Number.parseInt(key)
-        if (numKey > index + 1) {
-          shiftedAnswers[(numKey - 1).toString()] = newAnswers[key]
-        } else {
-          shiftedAnswers[key] = newAnswers[key]
-        }
-      })
-      setMatchingAnswers(shiftedAnswers)
     }
   }
 
@@ -452,74 +607,113 @@ export function CreateReadingQuestionModal({
 
   const handleAddMatchingHeadingsOption = () => {
     const nextKey = String.fromCharCode(65 + matchingHeadingsOptions.length)
-    setMatchingHeadingsOptions((prev) => [...prev, { key: nextKey, text: "" }])
+    setMatchingHeadingsOptions([...matchingHeadingsOptions, { key: nextKey, text: "" }])
   }
 
   const handleRemoveMatchingHeadingsOption = (index: number) => {
     if (matchingHeadingsOptions.length > 1) {
-      const removedKey = matchingHeadingsOptions[index].key
       const newOptions = matchingHeadingsOptions.filter((_, i) => i !== index)
       const reassignedOptions = newOptions.map((option, i) => ({
         ...option,
         key: String.fromCharCode(65 + i),
       }))
       setMatchingHeadingsOptions(reassignedOptions)
+    }
+  }
 
+  const handleMatchingHeadingsOptionChange = (index: number, text: string) => {
+    const newOptions = [...matchingHeadingsOptions]
+    newOptions[index].text = text
+    setMatchingHeadingsOptions(newOptions)
+  }
+
+  const handleAddMatchingHeadingsInput = () => {
+    setMatchingHeadingsInputCount((prev) => prev + 1)
+  }
+
+  const handleRemoveMatchingHeadingsInput = () => {
+    if (matchingHeadingsInputCount > 1) {
+      setMatchingHeadingsInputCount((prev) => prev - 1)
       const newAnswers = { ...matchingHeadingsAnswers }
-      Object.keys(newAnswers).forEach((answerKey) => {
-        if (newAnswers[answerKey] === removedKey) {
-          delete newAnswers[answerKey]
-        }
-      })
+      delete newAnswers[matchingHeadingsInputCount.toString()]
       setMatchingHeadingsAnswers(newAnswers)
     }
   }
 
-  const handleMatchingHeadingsOptionChange = (index: number, value: string) => {
-    const newOptions = [...matchingHeadingsOptions]
-    newOptions[index].text = value
-    setMatchingHeadingsOptions(newOptions)
-  }
-
-  const handleMatchingHeadingsAnswerChange = (inputNumber: string, optionKey: string) => {
+  const handleMatchingHeadingsAnswerChange = (inputIndex: number, optionKey: string) => {
     setMatchingHeadingsAnswers((prev) => ({
       ...prev,
-      [inputNumber]: optionKey,
+      [inputIndex.toString()]: optionKey,
     }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError("")
-
     if (!readingQuestionsId) return
 
-    const optionalQTextTypes = [
-      "FLOW_CHART",
-      "TABLE_COMPLETION",
-      "MAP_LABELING",
-      "TFNG",
-      "MATCHING_HEADINGS",
-      "SUMMARY_DRAG",
-      "NOTE_COMPLETION",
-    ]
-    if (!optionalQTextTypes.includes(formData.q_type) && !formData.q_text.trim()) {
-      setError("Savol matni majburiy")
-      return
-    }
-
-    if (formData.q_type === "NOTE_COMPLETION") {
+    if (formData.q_type === "TABLE_COMPLETION") {
+      if (columns.slice(1).length === 0 || rows.length === 0) {
+        // Skip corner label for column check
+        setError("Jadvalda kamida bitta ustun va qator bo'lishi kerak")
+        return
+      }
+      if (detectedBlanks.length === 0) {
+        setError("Jadvalda kamida bitta bo'sh joy (____ bilan belgilang) bo'lishi kerak")
+        return
+      }
+      if (Object.values(blankAnswers).some((answer) => !answer.trim())) {
+        setError("Barcha bo'sh joylar uchun javoblarni to'ldiring")
+        return
+      }
+    } else if (formData.q_type === "SENTENCE_ENDINGS") {
+      if (Object.values(sentenceEndingsOptions).some((opt) => !opt.trim())) {
+        setError("Barcha sentence beginninglarni to'ldiring")
+        return
+      }
+      if (Object.values(sentenceEndingsChoices).some((choice) => !choice.trim())) {
+        setError("Barcha sentence endinglarni to'ldiring")
+        return
+      }
+      if (Object.keys(sentenceEndingsAnswers).length === 0) {
+        setError("Kamida bitta javobni belgilang")
+        return
+      }
+    } else if (formData.q_type === "NOTE_COMPLETION") {
       if (!noteTemplate.trim()) {
         setError("Shablonni to'ldiring")
         return
       }
-      const blankCount = countBlanks(noteTemplate)
-      if (blankCount === 0) {
-        setError("Kamida bitta ____ bo'sh joy qo'shish kerak")
+      const emptyAnswers = Object.entries(noteAnswers).filter(([_, value]) => !value.trim())
+      if (emptyAnswers.length > 0) {
+        setError("Barcha javoblarni to'ldiring. Bo'sh javoblar mavjud!")
         return
       }
-      if (Object.values(noteAnswers).some((answer) => !answer.trim())) {
-        setError("Barcha bo'sh joylar uchun javob kiritish kerak")
+    } else if (formData.q_type === "SUMMARY_DRAG") {
+      if (Object.values(summaryDragChoices).some((choice) => !choice.trim())) {
+        setError("Barcha tanlov variantlarini to'ldiring")
+        return
+      }
+      if (summaryDragOptions.some((opt) => !opt.trim())) {
+        setError("Barcha variantlarni to'ldiring")
+        return
+      }
+      if (Object.keys(summaryDragAnswers).length === 0) {
+        setError("Kamida bitta to'g'ri javobni belgilang")
+        return
+      }
+    } else if (["MCQ_SINGLE", "MCQ_MULTI"].includes(formData.q_type)) {
+      if (options.some((opt) => !opt.text.trim())) {
+        setError("Barcha variantlarni to'ldiring")
+        return
+      }
+      if (correctAnswers.length === 0) {
+        setError("Kamida bitta to'g'ri javobni belgilang")
+        return
+      }
+    } else if (formData.q_type === "TABLE_COMPLETION") {
+      if (columns.slice(1).some((col) => !col.trim()) || rows.some((row) => !row.label.trim())) {
+        // Skip corner label for column check
+        setError("Barcha jadval maydonlarini to'ldiring")
         return
       }
     } else if (formData.q_type === "MATCHING_INFORMATION") {
@@ -537,53 +731,16 @@ export function CreateReadingQuestionModal({
       }
     } else if (formData.q_type === "MATCHING_HEADINGS") {
       if (matchingHeadingsOptions.some((opt) => !opt.text.trim())) {
-        setError("Barcha variantlarni to'ldiring")
+        setError("Barcha sarlavhalarni to'ldiring")
         return
       }
       if (Object.keys(matchingHeadingsAnswers).length === 0) {
         setError("Kamida bitta javobni belgilang")
         return
       }
-    } else if (["MCQ_SINGLE", "MCQ_MULTI", "SENTENCE_ENDINGS"].includes(formData.q_type)) {
-      if (options.some((opt) => !opt.text.trim())) {
-        setError("Barcha variantlarni to'ldiring")
-        return
-      }
-      if (correctAnswers.length === 0) {
-        setError("Kamida bitta to'g'ri javobni belgilang")
-        return
-      }
-    } else if (formData.q_type === "TFNG") {
-      // Fix for undeclared variable: questionData
-      // The variable questionData is declared later in the try block.
-      // For now, we'll ensure it's declared before this conditional block.
-      // However, the correct fix is to ensure questionData is initialized before this conditional check.
-      // For the purpose of this merge, we assume questionData will be properly initialized.
-      // If not, this block would need to be placed after questionData initialization.
-      // For now, we'll assume the context ensures it's declared.
-      // The correct structure is to have the questionData object initialized and then populate it.
-      // The logic for `TFNG` setting `options` and `correct_answers` will be handled
-      // within the main `questionData` construction block later.
     } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
       if (correctAnswers.length === 0 || correctAnswers.some((answer) => !answer.trim())) {
         setError("Kamida bitta to'g'ri javobni kiriting")
-        return
-      }
-    } else if (formData.q_type === "TABLE_COMPLETION") {
-      if (
-        columns.some((col) => !col.trim()) ||
-        rows.some((row) => !row.label.trim() || row.cells.some((cell) => cell === null || cell === undefined))
-      ) {
-        setError("Barcha jadval maydonlarini to'ldiring")
-        return
-      }
-    } else if (formData.q_type === "SUMMARY_DRAG") {
-      if (summaryDragRows.some((row) => !row.trim())) {
-        setError("Barcha qatorlarni to'ldiring")
-        return
-      }
-      if (summaryDragChoices && Object.values(summaryDragChoices).some((choice) => !choice.trim())) {
-        setError("Barcha choicelarni to'ldiring")
         return
       }
     }
@@ -597,47 +754,44 @@ export function CreateReadingQuestionModal({
         q_type: formData.q_type,
       }
 
-      if (formData.photo && formData.photo.trim()) {
-        questionData.photo = formData.photo
-      }
-
-      if (
-        (optionalQTextTypes.includes(formData.q_type) && formData.q_text.trim()) ||
-        !optionalQTextTypes.includes(formData.q_type)
-      ) {
+      if (formData.q_text.trim()) {
         questionData.q_text = formData.q_text
       }
 
-      if (formData.q_type === "NOTE_COMPLETION") {
+      if (formData.q_type === "SENTENCE_ENDINGS") {
+        questionData.options = sentenceEndingsOptions
+        questionData.choices = sentenceEndingsChoices
+        questionData.answers = sentenceEndingsAnswers
+      } else if (formData.q_type === "NOTE_COMPLETION") {
         questionData.options = noteTemplate
         questionData.answers = noteAnswers
+      } else if (formData.q_type === "SUMMARY_DRAG") {
+        questionData.rows = summaryDragRows
+        questionData.choices = summaryDragChoices
+        questionData.options = summaryDragOptions
+        questionData.answers = summaryDragAnswers
+      } else if (["MCQ_SINGLE", "MCQ_MULTI"].includes(formData.q_type)) {
+        questionData.options = options
+        questionData.correct_answers = correctAnswers
+      } else if (formData.q_type === "TABLE_COMPLETION") {
+        questionData.columns = columns // [cornerLabel, Column 0, Column 1, ...]
+        questionData.rows = rows // [{ label: "Row 0", cells: ["cell", "cell"] }, ...]
+        questionData.answers = blankAnswers // { "cell_0_0_1": "answer", ... }
       } else if (formData.q_type === "MATCHING_INFORMATION") {
         questionData.choices = matchingChoices
         questionData.rows = matchingRows
         questionData.answers = matchingAnswers
-      } else if (formData.q_type === "TABLE_COMPLETION") {
-        questionData.columns = columns
-        questionData.rows = rows
-        questionData.choices = choices
-        questionData.answers = tableAnswers
-      } else if (["MCQ_SINGLE", "MCQ_MULTI", "SENTENCE_ENDINGS"].includes(formData.q_type)) {
-        questionData.options = options
-        questionData.correct_answers = correctAnswers
-      } else if (formData.q_type === "TFNG") {
-        questionData.options = options
-        questionData.correct_answers = correctAnswers
-        // Note: TFNG in reading doesn't have photo like listening, so we only save options and correct_answers
       } else if (formData.q_type === "MATCHING_HEADINGS") {
-        questionData.options = matchingHeadingsOptions
-        questionData.answers = matchingHeadingsAnswers
+        questionData.options = matchingHeadingsOptions.map((opt) => opt.text)
+        questionData.rows = Array.from({ length: matchingHeadingsInputCount }, (_, i) => `Input ${i + 1}`)
+        questionData.correct_answers = matchingHeadingsAnswers
       } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)) {
         questionData.correct_answers = correctAnswers
       }
-      if (formData.q_type === "SUMMARY_DRAG") {
-        questionData.options = summaryDragRows[0] // The text with underscores
-        questionData.choices = summaryDragChoices // Object with key-value pairs (A: "difficult", B: "complex", etc.)
-        questionData.answers = summaryDragAnswers // Object with key-value pairs (1: "fundamental", 2: "admired", etc.)
-      }
+
+      // columns array structure: [cornerLabel, column1, column2, ...]
+
+      console.log("[v0] API POST Request:", JSON.stringify(questionData, null, 2))
 
       if (editingQuestion && !copyingQuestion) {
         await api.rQuestions.update(editingQuestion.id.toString(), questionData)
@@ -646,44 +800,21 @@ export function CreateReadingQuestionModal({
       }
 
       onQuestionCreated()
-
-      setFormData({
-        q_type: "MCQ_SINGLE",
-        q_text: "",
-        photo: "",
-      })
-      setOptions([{ key: "A", text: "" }])
-      setCorrectAnswers([])
-      setColumns([""])
-      setRows([{ label: "", cells: [""] }])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMatchingHeadingsOptions([{ key: "A", text: "" }])
-      setMatchingHeadingsInputCount(1)
-      setMatchingHeadingsAnswers({})
-      setNoteTemplate("")
-      setNoteAnswers({})
-      setSummaryDragRows(["", ""])
-      setSummaryDragChoices({})
-      setSummaryDragOptions([""])
-      setSummaryDragAnswers({})
-    } catch (error: any) {
-      console.error("Failed to save reading question:", error)
-      setError("Savol saqlashda xatolik yuz berdi")
+      onClose()
+    } catch (err) {
+      console.error("[v0] Error:", err)
+      setError(err instanceof Error ? err.message : "Xatolik yuz berdi")
     } finally {
       setLoading(false)
     }
   }
 
-  const needsOptions = ["MCQ_SINGLE", "MCQ_MULTI", "TFNG", "SUMMARY_DRAG", "SENTENCE_ENDINGS"].includes(formData.q_type)
-  const needsCorrectAnswers = ["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type)
+  const isSentenceEndings = formData.q_type === "SENTENCE_ENDINGS"
+  const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
+  const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
   const isTableCompletion = formData.q_type === "TABLE_COMPLETION"
   const isMatchingInformation = formData.q_type === "MATCHING_INFORMATION"
   const isMatchingHeadings = formData.q_type === "MATCHING_HEADINGS"
-  const isNoteCompletion = formData.q_type === "NOTE_COMPLETION"
-  const isSummaryDrag = formData.q_type === "SUMMARY_DRAG"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -706,18 +837,6 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
-          {isMatchingHeadings && (
-            <div className="bg-blue-500/20 border border-blue-500/50 rounded-lg p-3 space-y-2">
-              <p className="text-blue-400 text-sm font-semibold">Matching Headings uchun muhim ma'lumot:</p>
-              <ul className="text-blue-300 text-xs space-y-1 list-disc list-inside">
-                <li>Optionlar inputlar sonidan ko'p bo'lishi mumkin</li>
-                <li>Har bir input uchun to'g'ri optionni tanlang</li>
-                <li>Optionlar harflar bilan belgilanadi: A, B, C, D...</li>
-                <li>To'g'ri javob - option harfi (masalan: input 1 uchun option C to'g'ri bo'lsa, javob "C")</li>
-              </ul>
-            </div>
-          )}
-
           <div className="space-y-2">
             <Label htmlFor="q_type" className="text-slate-300 text-sm">
               Savol Turi *
@@ -727,7 +846,6 @@ export function CreateReadingQuestionModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-slate-700 border-slate-600">
-                <SelectItem value="TFNG">TRUE_FALSE_NOT_GIVEN</SelectItem>
                 <SelectItem value="MCQ_SINGLE">MULTIPLE_CHOICE_SINGLE</SelectItem>
                 <SelectItem value="MCQ_MULTI">MULTIPLE_CHOICE_MULTI</SelectItem>
                 <SelectItem value="SENTENCE_COMPLETION">SENTENCE_COMPLETION</SelectItem>
@@ -742,148 +860,77 @@ export function CreateReadingQuestionModal({
             </Select>
           </div>
 
-          {formData.q_type !== "NOTE_COMPLETION" && formData.q_type !== "SUMMARY_DRAG" && (
-            <div className="space-y-2">
-              <Label htmlFor="q_text" className="text-slate-300 text-sm">
-                Savol Matni *
-              </Label>
-              <Textarea
-                id="q_text"
-                value={formData.q_text}
-                onChange={(e) => handleInputChange("q_text", e.target.value)}
-                className="bg-slate-700/50 border-slate-600 text-white resize-y"
-                placeholder="What is the main idea of paragraph 1?"
-                rows={2}
-                required
-              />
-            </div>
-          )}
-
-          {(formData.q_type === "NOTE_COMPLETION" || formData.q_type === "SUMMARY_DRAG") && (
-            <div className="space-y-2">
-              <Label htmlFor="q_text" className="text-slate-300 text-sm">
-                Savol Matni (ixtiyoriy)
-              </Label>
-              <Textarea
-                id="q_text"
-                value={formData.q_text}
-                onChange={(e) => handleInputChange("q_text", e.target.value)}
-                className="bg-slate-700/50 border-slate-600 text-white resize-y"
-                placeholder="What is the main idea of paragraph 1?"
-                rows={2}
-              />
-            </div>
-          )}
-
           <div className="space-y-2">
-            <Label htmlFor="photo" className="text-slate-300 text-sm">
-              Rasm URL (ixtiyoriy)
+            <Label htmlFor="q_text" className="text-slate-300 text-sm">
+              Savol Matni (ixtiyoriy)
             </Label>
-            <Input
-              id="photo"
-              value={formData.photo}
-              onChange={(e) => handleInputChange("photo", e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white"
-              placeholder="uploads/questions/diagram.png"
+            <Textarea
+              id="q_text"
+              value={formData.q_text}
+              onChange={(e) => handleInputChange("q_text", e.target.value)}
+              className="bg-slate-700/50 border-slate-600 text-white resize-y min-h-[80px]"
+              placeholder="Savol matni (ixtiyoriy)"
             />
           </div>
 
-          {(needsOptions || formData.q_type === "MATCHING_HEADINGS") && formData.q_type !== "SUMMARY_DRAG" && (
+          {/* Conditionally render options based on q_type */}
+          {["MCQ_SINGLE", "MCQ_MULTI", "SUMMARY_COMPLETION"].includes(formData.q_type) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-slate-300 text-sm">
-                  Javob Variantlari *
-                  {formData.q_type === "MATCHING_HEADINGS" && (
-                    <span className="text-xs text-blue-400 ml-2">
-                      (Harflar bilan: A, B, C... - to'g'ri javob sifatida saqlanadi)
-                    </span>
-                  )}
-                </Label>
-                {formData.q_type !== "MATCHING_HEADINGS" && (
-                  <Button
-                    type="button"
-                    onClick={handleAddOption}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Variant
-                  </Button>
-                )}
+                <Label className="text-slate-300 text-sm">Javob Variantlari *</Label>
+                <Button
+                  type="button"
+                  onClick={handleAddOption}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Variant
+                </Button>
               </div>
-
-              {formData.q_type !== "MATCHING_HEADINGS" && formData.q_type !== "SUMMARY_DRAG" && (
-                <div className="space-y-2">
-                  {options.map((option, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div className="flex items-center gap-2 flex-1">
-                        <span
-                          className={`font-mono text-sm w-6 ${
-                            formData.q_type === "MATCHING_HEADINGS" ? "text-blue-400 font-bold" : "text-slate-300"
-                          }`}
-                        >
-                          {option.key}:
-                        </span>
-                        <Input
-                          value={option.text}
-                          onChange={(e) => handleOptionChange(index, e.target.value)}
-                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                          placeholder={
-                            formData.q_type === "MATCHING_HEADINGS"
-                              ? `Heading ${option.key} (to'g'ri javob: ${option.key})`
-                              : `Option ${option.key}`
-                          }
-                          required
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => handleCorrectAnswerToggle(option.key)}
-                          variant={correctAnswers.includes(option.key) ? "default" : "outline"}
-                          size="sm"
-                          className={
-                            correctAnswers.includes(option.key)
-                              ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7 min-w-[60px]"
-                              : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7 min-w-[60px]"
-                          }
-                        >
-                          {correctAnswers.includes(option.key)
-                            ? formData.q_type === "MATCHING_HEADINGS"
-                              ? `✓ ${option.key}`
-                              : "To'g'ri"
-                            : formData.q_type === "MATCHING_HEADINGS"
-                              ? option.key
-                              : "Belgilash"}
-                        </Button>
-                      </div>
-                      {options.length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => handleRemoveOption(index)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {formData.q_type === "MATCHING_HEADINGS" && correctAnswers.length > 0 && (
-                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-2 mt-2">
-                  <p className="text-green-400 text-xs">
-                    <span className="font-semibold">To'g'ri javoblar:</span> {correctAnswers.join(", ")}
-                  </p>
-                  <p className="text-green-300 text-xs mt-1">Bu raqamlar to'g'ri javob sifatida saqlanadi</p>
-                </div>
-              )}
+              <div className="space-y-2">
+                {options.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="text-slate-300 font-mono text-sm w-4">{option.key}:</span>
+                    <Input
+                      value={option.text}
+                      onChange={(e) => handleOptionChange(index, e.target.value)}
+                      className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                      placeholder={`Option ${option.key}`}
+                      required
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => handleCorrectAnswerToggle(option.key)}
+                      variant={correctAnswers.includes(option.key) ? "default" : "outline"}
+                      size="sm"
+                      className={
+                        correctAnswers.includes(option.key)
+                          ? "bg-green-600 hover:bg-green-700 text-xs px-2 py-1 h-7"
+                          : "border-slate-600 text-slate-300 hover:bg-slate-700 text-xs px-2 py-1 h-7"
+                      }
+                    >
+                      {correctAnswers.includes(option.key) ? "To'g'ri" : "Belgilash"}
+                    </Button>
+                    {options.length > 1 && (
+                      <Button
+                        type="button"
+                        onClick={() => handleRemoveOption(index)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {needsCorrectAnswers && (
+          {["SENTENCE_COMPLETION", "SUMMARY_COMPLETION"].includes(formData.q_type) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-slate-300 text-sm">To'g'ri Javoblar *</Label>
@@ -898,7 +945,14 @@ export function CreateReadingQuestionModal({
                   Javob
                 </Button>
               </div>
-
+              <p className="text-xs text-slate-400 mb-2">
+                <span className="text-green-400 font-semibold">
+                  Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
+                </span>
+              </p>
+              <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30 mb-2">
+                <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
+              </p>
               <div className="space-y-2">
                 {correctAnswers.map((answer, index) => (
                   <div key={index} className="flex items-center gap-2">
@@ -906,7 +960,7 @@ export function CreateReadingQuestionModal({
                       value={answer}
                       onChange={(e) => handleCorrectAnswerChange(index, e.target.value)}
                       className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                      placeholder={`To'g'ri javob ${index + 1}`}
+                      placeholder={`To'g'ri javob ${index + 1} (masalan: center / centre)`}
                       required
                     />
                     {correctAnswers.length > 1 && (
@@ -926,38 +980,259 @@ export function CreateReadingQuestionModal({
             </div>
           )}
 
-          {isTableCompletion && (
+          {isSentenceEndings && (
             <div className="space-y-4">
-              {/* Columns */}
+              {/* Sentence Beginnings (Options) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Jadval Ustunlari *</Label>
+                  <Label className="text-slate-300 text-sm font-semibold">
+                    Sentence Beginnings (Cümlə Başlanğıcları) *
+                  </Label>
                   <Button
                     type="button"
-                    onClick={handleAddColumn}
+                    onClick={handleAddSentenceEndingsOption}
                     variant="outline"
                     size="sm"
                     className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Ustun
+                    Qo'shish
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {columns.map((column, index) => (
+                <div className="space-y-2">
+                  {Object.entries(sentenceEndingsOptions)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-blue-400 font-bold font-mono text-sm w-6">{key}:</span>
+                        <Textarea
+                          value={value}
+                          onChange={(e) => handleSentenceEndingsOptionChange(key, e.target.value)}
+                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                          placeholder={`Sentence beginning ${key}`}
+                          rows={2}
+                          required
+                        />
+                        {Object.keys(sentenceEndingsOptions).length > 1 && (
+                          <Button
+                            type="button"
+                            onClick={() => handleRemoveSentenceEndingsOption(key)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Sentence Endings (Choices) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm font-semibold">Sentence Endings (Cümlə Sonu) *</Label>
+                  <Button
+                    type="button"
+                    onClick={handleAddSentenceEndingsChoice}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Qo'shish
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(sentenceEndingsChoices)
+                    .sort(([a], [b]) => a.charCodeAt(0) - b.charCodeAt(0))
+                    .map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-green-400 font-bold font-mono text-sm w-6">{key}:</span>
+                        <Textarea
+                          value={value}
+                          onChange={(e) => handleSentenceEndingsChoiceChange(key, e.target.value)}
+                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                          placeholder={`Sentence ending ${key}`}
+                          rows={2}
+                          required
+                        />
+                        {Object.keys(sentenceEndingsChoices).length > 1 && (
+                          <Button
+                            type="button"
+                            onClick={() => handleRemoveSentenceEndingsChoice(key)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Correct Answers (Matching) */}
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar (Moslashtirish) *</Label>
+                <p className="text-xs text-slate-400 mb-2">
+                  Har bir sentence beginning uchun to'g'ri sentence ending ni tanlang
+                </p>
+                <div className="space-y-2">
+                  {Object.entries(sentenceEndingsOptions)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([optionKey, optionValue]) => (
+                      <div key={optionKey} className="flex items-center gap-2 p-2 bg-slate-700/20 rounded">
+                        <span className="text-blue-400 font-bold font-mono text-sm w-6">{optionKey}:</span>
+                        <span className="text-slate-300 text-xs flex-1 truncate">
+                          {optionValue.substring(0, 50)}...
+                        </span>
+                        <Select
+                          value={sentenceEndingsAnswers[optionKey] || ""}
+                          onValueChange={(value) => handleSentenceEndingsAnswerChange(optionKey, value)}
+                        >
+                          <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-20">
+                            <SelectValue placeholder="?" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-700 border-slate-600">
+                            {Object.entries(sentenceEndingsChoices)
+                              .sort(([a], [b]) => a.charCodeAt(0) - b.charCodeAt(0))
+                              .map(([key, value]) => (
+                                <SelectItem key={key} value={key}>
+                                  {key}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {sentenceEndingsAnswers[optionKey] && (
+                          <span className="text-green-400 font-bold text-sm">✓</span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              {Object.keys(sentenceEndingsAnswers).length > 0 && (
+                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-3">
+                  <p className="text-green-400 text-sm font-semibold mb-2">To'g'ri javoblar:</p>
+                  <div className="space-y-1">
+                    {Object.entries(sentenceEndingsAnswers)
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([optionKey, choiceKey]) => (
+                        <p key={optionKey} className="text-green-300 text-xs">
+                          {optionKey} → {choiceKey}
+                        </p>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isNoteCompletion && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm font-semibold">Shablonni Kiriting (HTML bilan) *</Label>
+                <Textarea
+                  value={noteTemplate}
+                  onChange={(e) => handleNoteTemplateChange(e.target.value)}
+                  className="bg-slate-700/50 border-slate-600 text-white font-mono resize-y min-h-[200px]"
+                  placeholder="Shablonni kiriting"
+                  required
+                />
+              </div>
+
+              {countBlanks(noteTemplate) > 0 && (
+                <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
+                  <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar *</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {Object.keys(noteAnswers)
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((key) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-blue-400 font-mono text-sm font-bold w-8">{key}.</span>
+                          <Input
+                            value={noteAnswers[key]}
+                            onChange={(e) => handleNoteAnswerChange(key, e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                            placeholder={`Javob ${key}`}
+                            required
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isSummaryDrag && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">Qator Sarlavhalari - Ixtiyoriy</Label>
+                <div className="space-y-2">
+                  {summaryDragRows.map((row, index) => (
                     <div key={index} className="flex items-center gap-2">
-                      <span className="text-slate-400 text-xs w-12">#{index + 1}:</span>
+                      <span className="text-slate-400 text-sm w-20">Qator {index + 1}:</span>
                       <Input
-                        value={column}
-                        onChange={(e) => handleColumnChange(index, e.target.value)}
+                        value={row.label}
+                        onChange={(e) => {
+                          const newRows = [...summaryDragRows]
+                          newRows[index].label = e.target.value
+                          setSummaryDragRows(newRows)
+                        }}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Ustun ${index + 1}`}
+                        placeholder="Qator nomi"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Tanlov Variantlari (Chap Ustun) *</Label>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const nextKey = (Object.keys(summaryDragChoices).length + 1).toString()
+                      setSummaryDragChoices((prev) => ({ ...prev, [nextKey]: "" }))
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Variant
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 font-mono text-sm w-8">{key}.</span>
+                      <Input
+                        value={value}
+                        onChange={(e) => {
+                          setSummaryDragChoices((prev) => ({ ...prev, [key]: e.target.value }))
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${key}`}
                         required
                       />
-                      {columns.length > 1 && (
+                      {Object.keys(summaryDragChoices).length > 1 && (
                         <Button
                           type="button"
-                          onClick={() => handleRemoveColumn(index)}
+                          onClick={() => {
+                            const newChoices = { ...summaryDragChoices }
+                            delete newChoices[key]
+                            setSummaryDragChoices(newChoices)
+                            const newAnswers = { ...summaryDragAnswers }
+                            delete newAnswers[key]
+                            setSummaryDragAnswers(newAnswers)
+                          }}
                           variant="ghost"
                           size="sm"
                           className="text-red-400 hover:text-red-300"
@@ -970,148 +1245,327 @@ export function CreateReadingQuestionModal({
                 </div>
               </div>
 
-              {/* Rows */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Jadval Qatorlari *</Label>
-                  <Button
-                    type="button"
-                    onClick={handleAddRow}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Qator
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  {rows.map((row, rowIndex) => (
-                    <div key={rowIndex} className="border border-slate-600 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-xs w-16">Qator {rowIndex + 1}:</span>
-                        <Input
-                          value={row.label}
-                          onChange={(e) => handleRowLabelChange(rowIndex, e.target.value)}
-                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                          placeholder="Qator nomi (masalan: Preferred climate)"
-                          required
-                        />
-                        {rows.length > 1 && (
-                          <Button
-                            type="button"
-                            onClick={() => handleRemoveRow(rowIndex)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-400 hover:text-red-300"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
-                        {row.cells.map((cell, cellIndex) => (
-                          <div key={cellIndex} className="space-y-1">
-                            <Label className="text-xs text-slate-400">
-                              {columns[cellIndex] || `Ustun ${cellIndex + 1}`}
-                            </Label>
-                            <Input
-                              value={cell}
-                              onChange={(e) => handleRowCellChange(rowIndex, cellIndex, e.target.value)}
-                              className="bg-slate-700/50 border-slate-600 text-white"
-                              placeholder={`Bo'sh joy uchun "" qoldiring`}
-                            />
-                            <div className="text-xs text-slate-500">
-                              Bo'sh joy: {rowIndex}_{cellIndex}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Choices */}
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Tanlov Variantlari (bo'sh joylar uchun)</Label>
-                <div className="text-xs text-slate-400 mb-2">
-                  Format: qator_ustun (masalan: 0_2 - 1-qator, 3-ustun uchun). Bo'sh joylar uchun tanlov variantlarini
-                  kiriting.
-                </div>
-                <div className="space-y-2">
-                  {Object.entries(choices).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <Select value={key} disabled>
-                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-24">
-                          <SelectValue placeholder="0_0" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-700 border-slate-600">
-                          {Array.from({ length: rows.length }, (_, rowIdx) =>
-                            Array.from({ length: columns.length }, (_, colIdx) => `${rowIdx}_${colIdx}`),
-                          )
-                            .flat()
-                            .map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-slate-400">:</span>
-                      <Input
-                        value={value}
-                        onChange={(e) => handleChoiceChange(key, e.target.value)}
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder="Tanlov varianti (masalan: warm)"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          const newChoices = { ...choices }
-                          delete newChoices[key]
-                          setChoices(newChoices)
-                          const newAnswers = { ...tableAnswers }
-                          delete newAnswers[key]
-                          setTableAnswers(newAnswers)
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  <Label className="text-slate-300 text-sm">Variantlar (O'ng Ustun) *</Label>
                   <Button
                     type="button"
                     onClick={() => {
-                      const existingKeys = Object.keys(choices)
-                      let newKey = "0_0"
-                      let counter = 0
-                      while (existingKeys.includes(newKey)) {
-                        const row = Math.floor(counter / columns.length)
-                        const col = counter % columns.length
-                        newKey = `${row}_${col}`
-                        counter++
-                      }
-                      setChoices((prev) => ({ ...prev, [newKey]: "" }))
+                      setSummaryDragOptions((prev) => [...prev, ""])
                     }}
                     variant="outline"
                     size="sm"
                     className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Tanlov Qo'shish
+                    Variant
                   </Button>
+                </div>
+                <div className="space-y-2">
+                  {summaryDragOptions.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...summaryDragOptions]
+                          newOptions[index] = e.target.value
+                          setSummaryDragOptions(newOptions)
+                        }}
+                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
+                        placeholder={`Variant ${index + 1}`}
+                        required
+                      />
+                      {summaryDragOptions.length > 1 && (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const newOptions = summaryDragOptions.filter((_, i) => i !== index)
+                            setSummaryDragOptions(newOptions)
+                          }}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-slate-300 text-sm">To'g'ri Javoblarni Belgilang *</Label>
+                <div className="space-y-2">
+                  {Object.entries(summaryDragChoices).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-slate-300 text-sm w-32">
+                        {key}. {value}
+                      </span>
+                      <Select
+                        value={summaryDragAnswers[key] || undefined}
+                        onValueChange={(val) => {
+                          setSummaryDragAnswers((prev) => ({ ...prev, [key]: val }))
+                        }}
+                      >
+                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Variant tanlang" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-700 border-slate-600">
+                          {summaryDragOptions
+                            .filter((option) => option.trim())
+                            .map((option, index) => (
+                              <SelectItem key={index} value={option}>
+                                {option}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      {summaryDragAnswers[key] && <span className="text-green-400 text-sm font-bold">✓</span>}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
+          {isTableCompletion && (
+            <div className="space-y-4">
+              {/* Control Buttons */}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  onClick={handleAddColumn}
+                  variant="outline"
+                  size="sm"
+                  className="border-blue-600 text-blue-400 hover:bg-blue-500/10 bg-transparent text-xs"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Ustun Qo'shish
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleAddRow}
+                  variant="outline"
+                  size="sm"
+                  className="border-green-600 text-green-400 hover:bg-green-500/10 bg-transparent text-xs"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Qator Qo'shish
+                </Button>
+              </div>
+
+              <div className="bg-blue-900/20 border border-blue-700/30 rounded p-3">
+                <p className="text-blue-300 text-xs font-semibold mb-2">📝 Ko'rsatmalar:</p>
+                <ul className="text-blue-300 text-xs space-y-1 list-disc list-inside">
+                  <li>Jadval ustunlari 0-indeksdan boshlanadi (0, 1, 2, ...)</li>
+                  <li>Har bir qator ham 0-indeksdan boshlanadi</li>
+                  <li>
+                    Bo'sh joylar uchun <span className="font-mono bg-blue-800 px-1 rounded">____</span> (4 ta pastki
+                    chiziq) yozing
+                  </li>
+                  <li>Bo'sh joylar ustun sarlavhalarida, qator etiketlarida va hujayralarida bo'lishi mumkin</li>
+                  <li>Bir hujayraga bir nechta bo'sh joylar bo'lishi mumkin</li>
+                  <li>Chap yuqori burchakdagi maydon ixtiyoriy - bo'sh qoldirish mumkin</li>
+                </ul>
+              </div>
+
+              <div className="overflow-x-auto bg-slate-700/30 border border-slate-600 rounded-lg p-4">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="border-2 border-slate-600 bg-slate-700 text-slate-300 p-3 text-sm font-semibold text-left min-w-24">
+                        <div className="flex flex-col gap-1">
+                          <div className="text-xs text-slate-400">Jadval nomi (ixtiyoriy)</div>
+                          <input
+                            type="text"
+                            value={columns[0] || ""}
+                            onChange={(e) => handleColumnChange(0, e.target.value)}
+                            className="bg-slate-600/50 border border-slate-500 rounded px-2 py-1 text-slate-200 text-sm outline-none focus:border-blue-400 transition-colors"
+                            placeholder="Qator"
+                          />
+                        </div>
+                      </th>
+                      {columns.slice(1).map((col, idx) => {
+                        const actualIndex = idx + 1 // Real index in columns array
+                        return (
+                          <th
+                            key={actualIndex}
+                            className={`border-2 p-3 text-sm font-semibold text-left min-w-32 relative group ${
+                              col.includes("____")
+                                ? "border-yellow-500 bg-yellow-900/20 text-yellow-300"
+                                : "border-slate-600 bg-slate-700 text-slate-300"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="text-xs text-slate-400 mb-1">Ustun {idx}</div>
+                                <input
+                                  type="text"
+                                  value={col}
+                                  onChange={(e) => handleColumnChange(actualIndex, e.target.value)}
+                                  className={`bg-transparent outline-none w-full ${
+                                    col.includes("____") ? "text-yellow-300 font-semibold" : "text-slate-300"
+                                  }`}
+                                  placeholder={`Ustun ${idx}`}
+                                />
+                              </div>
+                              {columns.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveColumn(actualIndex)}
+                                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, rowIdx) => (
+                      <tr key={rowIdx}>
+                        <td
+                          className={`border-2 p-3 text-sm font-semibold relative group ${
+                            row.label.includes("____")
+                              ? "border-yellow-500 bg-yellow-900/20 text-yellow-300"
+                              : "border-slate-600 bg-slate-700/50 text-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="text-xs text-slate-400 mb-1">Qator {rowIdx}</div>
+                              <input
+                                type="text"
+                                value={row.label}
+                                onChange={(e) => handleRowLabelChange(rowIdx, e.target.value)}
+                                className={`bg-transparent outline-none w-full ${
+                                  row.label.includes("____") ? "text-yellow-300 font-semibold" : "text-slate-300"
+                                }`}
+                                placeholder={`Qator ${rowIdx}`}
+                              />
+                            </div>
+                            {rows.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRow(rowIdx)}
+                                className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        {row.cells.map((cell, cellIdx) => (
+                          <td
+                            key={cellIdx}
+                            className={`border-2 p-3 text-sm hover:bg-slate-700/50 transition-colors cursor-text ${
+                              cell.includes("____")
+                                ? "border-yellow-500 bg-yellow-900/20"
+                                : "border-slate-600 bg-slate-800"
+                            }`}
+                          >
+                            <div className="text-xs text-slate-500 mb-1">
+                              [{rowIdx},{cellIdx}]
+                            </div>
+                            <input
+                              type="text"
+                              value={cell}
+                              onChange={(e) => handleRowCellChange(rowIdx, cellIdx, e.target.value)}
+                              className={`w-full bg-transparent outline-none ${
+                                cell.includes("____") ? "text-yellow-300 font-semibold" : "text-slate-200"
+                              }`}
+                              placeholder={`[${rowIdx},${cellIdx}]`}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {detectedBlanks.length > 0 && (
+                <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
+                  <Label className="text-slate-300 text-sm font-semibold">
+                    Aniqlangan Bo'sh Joylar ({detectedBlanks.length})
+                  </Label>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-400">
+                      {Object.values(blankAnswers).filter((a) => a.trim()).length} / {detectedBlanks.length}{" "}
+                      to'ldirilgan
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {detectedBlanks.map((blank) => (
+                      <div
+                        key={blank.key}
+                        className="flex items-center gap-3 p-3 bg-slate-700/50 rounded border border-slate-600"
+                      >
+                        <div className="flex-shrink-0">
+                          <span className="text-yellow-400 font-mono text-sm font-bold bg-yellow-900/30 px-3 py-1 rounded">
+                            {blank.key}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-slate-400 text-xs mb-1">
+                            {blank.displayLabel || (
+                              <>
+                                {blank.type === "column" && (
+                                  <>
+                                    Ustun: <span className="text-slate-300 font-semibold">{blank.col}</span>
+                                    {blank.blankIndex && blank.blankIndex > 1 && <> (Bo'sh joy #{blank.blankIndex})</>}
+                                  </>
+                                )}
+                                {blank.type === "row" && (
+                                  <>
+                                    Qator: <span className="text-slate-300 font-semibold">{blank.row}</span>
+                                    {blank.blankIndex && blank.blankIndex > 1 && <> (Bo'sh joy #{blank.blankIndex})</>}
+                                  </>
+                                )}
+                                {blank.type === "cell" && (
+                                  <>
+                                    Hujayra:{" "}
+                                    <span className="text-slate-300 font-semibold">
+                                      [{blank.row},{blank.col}]
+                                    </span>
+                                    {blank.blankIndex && blank.blankIndex > 1 && <> (Bo'sh joy #{blank.blankIndex})</>}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </p>
+                          <Input
+                            value={blankAnswers[blank.key] || ""}
+                            onChange={(e) => handleBlankAnswerChange(blank.key, e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white text-sm"
+                            placeholder="To'g'ri javobni kiriting"
+                            required
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detectedBlanks.length === 0 && (
+                <div className="bg-amber-900/20 border border-amber-700/30 rounded p-3">
+                  <p className="text-amber-300 text-xs">
+                    ⚠️ Jadvalda bo'sh joy topilmadi. Jadvalga{" "}
+                    <span className="font-mono bg-amber-800 px-1 rounded">____</span> yozing.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {isMatchingInformation && (
             <div className="space-y-4">
-              {/* Matching Choices */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-slate-300 text-sm">Tanlov Variantlari *</Label>
@@ -1134,7 +1588,7 @@ export function CreateReadingQuestionModal({
                         value={value}
                         onChange={(e) => handleMatchingChoiceChange(key, e.target.value)}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`${key} varianti (masalan: the Chinese)`}
+                        placeholder={`${key} varianti`}
                         required
                       />
                       {Object.keys(matchingChoices).length > 1 && (
@@ -1153,7 +1607,6 @@ export function CreateReadingQuestionModal({
                 </div>
               </div>
 
-              {/* Matching Rows */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-slate-300 text-sm">Moslashtiriladigan Elementlar *</Label>
@@ -1176,11 +1629,11 @@ export function CreateReadingQuestionModal({
                         value={row}
                         onChange={(e) => handleMatchingRowChange(index, e.target.value)}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Element ${index + 1} (masalan: black powder)`}
+                        placeholder={`Element ${index + 1}`}
                         required
                       />
                       <Select
-                        value={matchingAnswers[(index + 1).toString()] || ""}
+                        value={matchingAnswers[(index + 1).toString()] || undefined}
                         onValueChange={(value) => handleMatchingAnswerChange(index, value)}
                       >
                         <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-20">
@@ -1214,23 +1667,9 @@ export function CreateReadingQuestionModal({
 
           {isMatchingHeadings && (
             <div className="space-y-4">
-              {/* Input Count */}
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Inputlar soni (passagedagi tartib raqamlar)</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={matchingHeadingsInputCount}
-                  onChange={(e) => setMatchingHeadingsInputCount(Number.parseInt(e.target.value) || 1)}
-                  className="bg-slate-700/50 border-slate-600 text-white w-32"
-                />
-                <p className="text-xs text-slate-400">Passageda nechta tartib raqam bor? (1., 2., 3., ...)</p>
-              </div>
-
-              {/* Options */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Optionlar (headings) *</Label>
+                  <Label className="text-slate-300 text-sm">Sarlavhalar *</Label>
                   <Button
                     type="button"
                     onClick={handleAddMatchingHeadingsOption}
@@ -1239,18 +1678,18 @@ export function CreateReadingQuestionModal({
                     className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Option
+                    Sarlavha
                   </Button>
                 </div>
                 <div className="space-y-2">
                   {matchingHeadingsOptions.map((option, index) => (
                     <div key={index} className="flex items-center gap-2">
-                      <span className="text-blue-400 font-bold font-mono text-sm w-8">{option.key}:</span>
+                      <span className="text-slate-300 font-mono text-sm w-4">{option.key}:</span>
                       <Input
                         value={option.text}
                         onChange={(e) => handleMatchingHeadingsOptionChange(index, e.target.value)}
                         className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Option ${option.key} (masalan: The importance of...)`}
+                        placeholder={`Sarlavha ${option.key}`}
                         required
                       />
                       {matchingHeadingsOptions.length > 1 && (
@@ -1269,236 +1708,54 @@ export function CreateReadingQuestionModal({
                 </div>
               </div>
 
-              {/* Correct Answers Selection */}
               <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">To'g'ri javoblarni belgilang *</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 text-sm">Inputlar Soni *</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleRemoveMatchingHeadingsInput}
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                      disabled={matchingHeadingsInputCount <= 1}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                    <span className="text-slate-300 text-sm w-8 text-center">{matchingHeadingsInputCount}</span>
+                    <Button
+                      type="button"
+                      onClick={handleAddMatchingHeadingsInput}
+                      variant="outline"
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   {Array.from({ length: matchingHeadingsInputCount }, (_, i) => i + 1).map((inputNum) => (
                     <div key={inputNum} className="flex items-center gap-2">
-                      <span className="text-slate-300 text-sm w-24">Input {inputNum}:</span>
+                      <span className="text-slate-300 text-sm w-16">Input {inputNum}:</span>
                       <Select
-                        value={matchingHeadingsAnswers[inputNum.toString()] || ""}
-                        onValueChange={(value) => handleMatchingHeadingsAnswerChange(inputNum.toString(), value)}
+                        value={matchingHeadingsAnswers[inputNum.toString()] || undefined}
+                        onValueChange={(value) => handleMatchingHeadingsAnswerChange(inputNum, value)}
                       >
                         <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white flex-1">
-                          <SelectValue placeholder="Option tanlang" />
+                          <SelectValue placeholder="Sarlavha tanlang" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-700 border-slate-600">
                           {matchingHeadingsOptions.map((option) => (
                             <SelectItem key={option.key} value={option.key}>
-                              {option.key}: {option.text.substring(0, 50)}...
+                              {option.key}: {option.text}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                       {matchingHeadingsAnswers[inputNum.toString()] && (
-                        <span className="text-green-400 text-sm font-bold w-12">
-                          ✓ {matchingHeadingsAnswers[inputNum.toString()]}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Summary */}
-              {Object.keys(matchingHeadingsAnswers).length > 0 && (
-                <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-3">
-                  <p className="text-green-400 text-sm font-semibold mb-2">To'g'ri javoblar:</p>
-                  <div className="space-y-1">
-                    {Object.entries(matchingHeadingsAnswers)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([inputNum, optionKey]) => (
-                        <p key={inputNum} className="text-green-300 text-xs">
-                          Input {inputNum} → Option {optionKey}
-                        </p>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {isNoteCompletion && (
-            <div className="space-y-4">
-              {/* Note Template */}
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm font-semibold">Shablonni Kiriting (HTML bilan) *</Label>
-                <p className="text-xs text-slate-400">
-                  HTML teglaridan foydalaning: &lt;b&gt;, &lt;br&gt;, va bo'sh joylar uchun ____ (4 ta pastki chiziq)
-                </p>
-                <Textarea
-                  value={noteTemplate}
-                  onChange={(e) => handleNoteTemplateChange(e.target.value)}
-                  className="bg-slate-700/50 border-slate-600 text-white font-mono resize-y min-h-[200px]"
-                  placeholder={`<b>Revision Note</b><br><br>• Problem with: the brochure sample<br>• Company name: ____ Hotel Chains<br>• Letters of the ____ should be bigger.`}
-                  required
-                />
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-400">Topilgan bo'sh joylar:</span>
-                  <span className="text-blue-400 font-bold">{countBlanks(noteTemplate)}</span>
-                </div>
-              </div>
-
-              {/* Correct Answers for blanks */}
-              {countBlanks(noteTemplate) > 0 && (
-                <div className="space-y-3 bg-slate-700/20 p-4 rounded-lg border border-slate-600">
-                  <Label className="text-slate-300 text-sm font-semibold">To'g'ri Javoblar *</Label>
-                  <p className="text-xs text-slate-400 mb-2">
-                    Har bir bo'sh joy uchun to'g'ri javobni kiriting.{" "}
-                    <span className="text-green-400 font-semibold">
-                      Bir nechta to'g'ri javob bo'lsa " / " bilan ajrating
-                    </span>
-                  </p>
-                  <p className="text-xs text-blue-300 bg-blue-900/20 p-2 rounded border border-blue-700/30">
-                    <span className="font-semibold">Misol:</span> center / centre yoki 15th September / 15 September
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {Object.keys(noteAnswers)
-                      .sort((a, b) => Number(a) - Number(b))
-                      .map((key) => (
-                        <div key={key} className="flex items-center gap-2">
-                          <span className="text-blue-400 font-mono text-sm font-bold w-8">{key}.</span>
-                          <Input
-                            value={noteAnswers[key]}
-                            onChange={(e) => handleNoteAnswerChange(key, e.target.value)}
-                            className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                            placeholder={`Javob ${key} (masalan: center / centre)`}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {isSummaryDrag && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="summary_drag_text" className="text-slate-300 text-sm">
-                  Matn (Blank joylar uchun ____) *
-                </Label>
-                <Textarea
-                  id="summary_drag_text"
-                  value={summaryDragRows[0] || ""}
-                  onChange={(e) => setSummaryDragRows([e.target.value])}
-                  className="bg-slate-700/50 border-slate-600 text-white resize-y"
-                  placeholder="The wheel is one invention that has had a major impact on ____ aspects of life..."
-                  rows={4}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Javob Variantlari (Choicelar) *</Label>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const nextKey = String.fromCharCode(65 + Object.keys(summaryDragChoices).length)
-                      setSummaryDragChoices((prev) => ({ ...prev, [nextKey]: "" }))
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Choice
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {Object.entries(summaryDragChoices).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-slate-300 font-mono text-sm font-bold w-6">{key}:</span>
-                      <Input
-                        value={value}
-                        onChange={(e) =>
-                          setSummaryDragChoices((prev) => ({
-                            ...prev,
-                            [key]: e.target.value,
-                          }))
-                        }
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Choice ${key} (masalan: difficult)`}
-                        required
-                      />
-                      {Object.keys(summaryDragChoices).length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            const newChoices = { ...summaryDragChoices }
-                            delete newChoices[key]
-                            setSummaryDragChoices(newChoices)
-                            const newAnswers = { ...summaryDragAnswers }
-                            delete newAnswers[key]
-                            setSummaryDragAnswers(newAnswers)
-                          }}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">To'g'ri Javoblar (Blank joylar uchun) *</Label>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const nextBlankNumber = Math.max(0, ...Object.keys(summaryDragAnswers).map(Number)) + 1
-                      setSummaryDragAnswers((prev) => ({ ...prev, [nextBlankNumber.toString()]: "" }))
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Javob
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {Object.entries(summaryDragAnswers).map(([blankNum, answer]) => (
-                    <div key={blankNum} className="flex items-center gap-2">
-                      <span className="text-slate-300 font-mono text-sm font-bold w-6">{blankNum}:</span>
-                      <select
-                        value={answer}
-                        onChange={(e) =>
-                          setSummaryDragAnswers((prev) => ({
-                            ...prev,
-                            [blankNum]: e.target.value,
-                          }))
-                        }
-                        className="bg-slate-700/50 border border-slate-600 text-white flex-1 px-3 py-2 rounded text-sm"
-                        required
-                      >
-                        <option value="">Tanlang...</option>
-                        {Object.entries(summaryDragChoices).map(([key, value]) => (
-                          <option key={key} value={value}>
-                            {key}: {value}
-                          </option>
-                        ))}
-                      </select>
-                      {Object.keys(summaryDragAnswers).length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            const newAnswers = { ...summaryDragAnswers }
-                            delete newAnswers[blankNum]
-                            setSummaryDragAnswers(newAnswers)
-                          }}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
+                        <span className="text-green-400 text-sm font-bold">✓</span>
                       )}
                     </div>
                   ))}
@@ -1517,7 +1774,7 @@ export function CreateReadingQuestionModal({
             >
               Bekor qilish
             </Button>
-            <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" disabled={loading}>
+            <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={loading}>
               {loading
                 ? "Saqlanmoqda..."
                 : editingQuestion

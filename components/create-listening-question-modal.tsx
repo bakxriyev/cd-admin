@@ -50,9 +50,14 @@ export function CreateListeningQuestionModal({
   })
   const [options, setOptions] = useState([{ key: "A", text: "" }])
   const [correctAnswers, setCorrectAnswers] = useState<string[]>([])
-  const [columns, setColumns] = useState<string[]>([""])
-  const [rows, setRows] = useState<Array<{ label: string; cells: string[] }>>([{ label: "", cells: [""] }])
-  const [choices, setChoices] = useState<Record<string, string>>({})
+  const [tableColumns, setTableColumns] = useState<string[]>(["", ""]) // First element is corner label
+  const [tableRows, setTableRows] = useState<Array<{ label: string; cells: string[] }>>([{ label: "", cells: [""] }])
+  const [detectedBlanks, setDetectedBlanks] = useState<Array<{ key: string; position: string }>>([])
+  const [blankAnswers, setBlankAnswers] = useState<Record<string, string>>({})
+
+  const [columns, setColumns] = useState<string[]>([""]) // This is likely unused now, consider removing
+  const [rows, setRows] = useState<Array<{ label: string; cells: string[] }>>([{ label: "", cells: [""] }]) // This is likely unused now, consider removing
+  const [choices, setChoices] = useState<Record<string, string>>({}) // This is likely unused now, consider removing
   const [matchingChoices, setMatchingChoices] = useState<Record<string, string>>({ A: "" })
   const [matchingRows, setMatchingRows] = useState<string[]>([""])
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({})
@@ -82,12 +87,88 @@ export function CreateListeningQuestionModal({
   const [summaryDragOptions, setSummaryDragOptions] = useState<string[]>([""])
   const [summaryDragAnswers, setSummaryDragAnswers] = useState<Record<string, string>>({})
 
-  const [tableAnswers, setTableAnswers] = useState<Record<string, string>>({})
+  // This state is no longer needed as it's replaced by tableAnswers
+  // const [tableAnswers, setTableAnswers] = useState<Record<string, string>>({})
+
+  const detectBlanksInTable = () => {
+    const blanks: Array<{ key: string; position: string }> = []
+    const blankPattern = /_{3,}/g
+
+    // Check corner label (0,0)
+    let blankCount = 0
+    const cornerMatches = tableColumns[0]?.match(blankPattern)
+    if (cornerMatches) {
+      cornerMatches.forEach(() => {
+        blankCount++
+        blanks.push({
+          key: `0_0_${blankCount}`,
+          position: `Burchak (0,0) - Bo'sh joy ${blankCount}`,
+        })
+      })
+    }
+
+    // Check column headers (row 0, columns 1+)
+    tableColumns.slice(1).forEach((col, colIndex) => {
+      blankCount = 0
+      const matches = col.match(blankPattern)
+      if (matches) {
+        matches.forEach(() => {
+          blankCount++
+          blanks.push({
+            key: `0_${colIndex + 1}_${blankCount}`,
+            position: `Ustun ${colIndex + 1} (0,${colIndex + 1}) - Bo'sh joy ${blankCount}`,
+          })
+        })
+      }
+    })
+
+    // Check rows
+    tableRows.forEach((row, rowIndex) => {
+      // Check row label (column 0)
+      blankCount = 0
+      const labelMatches = row.label.match(blankPattern)
+      if (labelMatches) {
+        labelMatches.forEach(() => {
+          blankCount++
+          blanks.push({
+            key: `${rowIndex + 1}_0_${blankCount}`,
+            position: `Qator ${rowIndex + 1} nomi (${rowIndex + 1},0) - Bo'sh joy ${blankCount}`,
+          })
+        })
+      }
+
+      // Check cells
+      row.cells.forEach((cell, cellIndex) => {
+        blankCount = 0
+        const cellMatches = cell.match(blankPattern)
+        if (cellMatches) {
+          cellMatches.forEach(() => {
+            blankCount++
+            blanks.push({
+              key: `${rowIndex + 1}_${cellIndex + 1}_${blankCount}`,
+              position: `Qator ${rowIndex + 1}, Ustun ${cellIndex + 1} (${rowIndex + 1},${cellIndex + 1}) - Bo'sh joy ${blankCount}`,
+            })
+          })
+        }
+      })
+    })
+
+    setDetectedBlanks(blanks)
+  }
+
+  useEffect(() => {
+    if (formData.q_type === "TABLE_COMPLETION") {
+      const timer = setTimeout(() => {
+        detectBlanksInTable()
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [tableColumns, tableRows, formData.q_type])
 
   useEffect(() => {
     const questionToLoad = editingQuestion || copyingQuestion
 
-    if (questionToLoad) {
+    if (questionToLoad && isOpen) {
       console.log("[v0] Loading question:", questionToLoad.q_type)
       console.log("[v0] Question data:", questionToLoad)
 
@@ -149,10 +230,26 @@ export function CreateListeningQuestionModal({
           setMatchingAnswers(questionToLoad.answers)
         }
       } else if (questionToLoad.q_type === "TABLE_COMPLETION") {
-        setColumns(questionToLoad.columns || [])
-        setRows(questionToLoad.rows || [])
-        setChoices(questionToLoad.choices || {})
-        setTableAnswers(questionToLoad.answers || {})
+        if (questionToLoad.columns && Array.isArray(questionToLoad.columns)) {
+          setTableColumns(questionToLoad.columns)
+        }
+        if (questionToLoad.rows && Array.isArray(questionToLoad.rows)) {
+          // Ensure rows are in the expected format { label: string, cells: string[] }
+          const formattedRows = questionToLoad.rows.map((row: any) => {
+            if (Array.isArray(row) && row.length >= 1) {
+              return { label: row[0], cells: row.slice(1) }
+            }
+            return { label: "", cells: [""] } // Fallback for unexpected format
+          })
+          setTableRows(formattedRows)
+        }
+        if (questionToLoad.answers && typeof questionToLoad.answers === "object") {
+          setBlankAnswers(questionToLoad.answers)
+        }
+        // Trigger blank detection after data is loaded
+        setTimeout(() => {
+          detectBlanksInTable()
+        }, 100)
       } else if (
         ["MCQ_SINGLE", "MCQ_MULTI", "MATCHING", "SENTENCE_ENDINGS", "MATCHING_HEADINGS", "MULTIPLE_CHOICE"].includes(
           questionToLoad.q_type,
@@ -241,16 +338,24 @@ export function CreateListeningQuestionModal({
           setSummaryDragAnswers(questionToLoad.correct_answers)
         }
       }
-    } else {
+    } else if (!isOpen) {
+      // Reset form
       setFormData({
         q_type: "MCQ_SINGLE",
         q_text: "",
       })
       setOptions([{ key: "A", text: "" }])
       setCorrectAnswers([])
+      // Resetting unused states
       setColumns([""])
       setRows([{ label: "", cells: [""] }])
       setChoices({})
+      // Resetting TABLE_COMPLETION states
+      setTableColumns(["", ""]) // Reset to initial state with corner
+      setTableRows([{ label: "", cells: [""] }]) // Reset to initial state
+      setDetectedBlanks([]) // Clear detected blanks
+      setBlankAnswers({}) // Clear blank answers
+
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
@@ -275,7 +380,6 @@ export function CreateListeningQuestionModal({
       setSummaryDragChoices({ "1": "" })
       setSummaryDragOptions([""])
       setSummaryDragAnswers({})
-      setTableAnswers({})
     }
     setPhotoFile(null)
   }, [editingQuestion, copyingQuestion, isOpen])
@@ -287,6 +391,40 @@ export function CreateListeningQuestionModal({
   const handleQuestionTypeChange = (value: string) => {
     setFormData((prev) => ({ ...prev, q_type: value as ListeningQuestion["q_type"] }))
 
+    // Reset all specific states to ensure clean state for the new type
+    setOptions([{ key: "A", text: "" }])
+    setCorrectAnswers([])
+    setMapPositions({})
+    setImagePreview("")
+    setPhotoFile(null)
+
+    // Resetting TABLE_COMPLETION states
+    setTableColumns(["", ""]) // Reset to initial state with corner
+    setTableRows([{ label: "", cells: [""] }]) // Reset to initial state
+    setDetectedBlanks([]) // Clear detected blanks
+    setBlankAnswers({}) // Clear blank answers
+
+    setMatchingChoices({ A: "" })
+    setMatchingRows([""])
+    setMatchingAnswers({})
+    setFlowChartChoices({ "1": "" })
+    setFlowChartOptions([""])
+    setFlowChartAnswers({})
+    setNoteTemplate("")
+    setNoteAnswers({})
+    setTfngPhoto(null)
+    setTfngChoices({ "1": "" })
+    setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
+    setTfngAnswers({})
+    setSummaryDragRows([
+      { label: "People", value: "" },
+      { label: "Staff Responsibilities", value: "" },
+    ])
+    setSummaryDragChoices({ "1": "" })
+    setSummaryDragOptions([""])
+    setSummaryDragAnswers({})
+
+    // Set initial states based on the new question type
     if (value === "TFNG") {
       setTfngPhoto(null)
       setTfngChoices({ "1": "" })
@@ -299,50 +437,14 @@ export function CreateListeningQuestionModal({
       setFlowChartChoices({ "1": "" })
       setFlowChartOptions([""])
       setFlowChartAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMapPositions({})
-      setImagePreview("")
     } else if (value === "TABLE_COMPLETION") {
-      setColumns([""])
-      setRows([{ label: "", cells: [""] }])
-      setChoices({})
-      setTableAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMapPositions({})
-      setImagePreview("")
+      // Handled by the reset above
     } else if (value === "MATCHING_INFORMATION") {
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMapPositions({})
-      setImagePreview("")
     } else if (["SENTENCE_COMPLETION", "SUMMARY_COMPLETION", "SHORT_ANSWER"].includes(value)) {
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMapPositions({})
-      setImagePreview("")
+      // No specific complex states to reset beyond the general ones
     } else if (
       [
         "MCQ_SINGLE",
@@ -357,35 +459,19 @@ export function CreateListeningQuestionModal({
       ].includes(value)
     ) {
       setOptions([{ key: "A", text: "" }])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMapPositions({})
-      setImagePreview("")
-      // Removed mapType2 options reset
-    }
-    if (value === "SUMMARY_DRAG") {
-      setSummaryDragRows([
-        { label: "People", value: "" },
-        { label: "Staff Responsibilities", value: "" },
-      ])
-      setSummaryDragChoices({ "1": "" })
-      setSummaryDragOptions([""])
-      setSummaryDragAnswers({})
-      setOptions([])
-      setCorrectAnswers([])
-      setColumns([])
-      setRows([])
-      setChoices({})
-      setMatchingChoices({ A: "" })
-      setMatchingRows([""])
-      setMatchingAnswers({})
-      setMapPositions({})
-      setImagePreview("")
+      if (value === "TFNG") {
+        setTfngChoices({ "1": "" })
+        setTfngOptions(["A", "B", "C", "D", "E", "F", "G", "H"])
+        setTfngAnswers({})
+      } else if (value === "SUMMARY_DRAG") {
+        setSummaryDragRows([
+          { label: "People", value: "" },
+          { label: "Staff Responsibilities", value: "" },
+        ])
+        setSummaryDragChoices({ "1": "" })
+        setSummaryDragOptions([""])
+        setSummaryDragAnswers({})
+      }
     }
   }
 
@@ -440,6 +526,62 @@ export function CreateListeningQuestionModal({
     })
 
     setMapPositions(reassigned)
+  }
+
+  const handleTableAddColumn = () => {
+    const newColumns = [...tableColumns, ""]
+    setTableColumns(newColumns)
+    const newRows = tableRows.map((row) => ({
+      ...row,
+      cells: [...row.cells, ""],
+    }))
+    setTableRows(newRows)
+  }
+
+  const handleTableRemoveColumn = (index: number) => {
+    // Prevent removing if only corner + 1 column left
+    if (tableColumns.length > 2 && index > 0) {
+      const newColumns = tableColumns.filter((_, i) => i !== index)
+      setTableColumns(newColumns)
+      const newRows = tableRows.map((row) => ({
+        ...row,
+        cells: row.cells.filter((_, i) => i !== index - 1),
+      }))
+      setTableRows(newRows)
+    }
+  }
+
+  const handleTableColumnChange = (index: number, value: string) => {
+    const newColumns = [...tableColumns]
+    newColumns[index] = value
+    setTableColumns(newColumns)
+  }
+
+  const handleTableAddRow = () => {
+    setTableRows([...tableRows, { label: "", cells: new Array(tableColumns.length - 1).fill("") }])
+  }
+
+  const handleTableRemoveRow = (index: number) => {
+    if (tableRows.length > 1) {
+      setTableRows(tableRows.filter((_, i) => i !== index))
+    }
+  }
+
+  const handleTableRowLabelChange = (rowIndex: number, value: string) => {
+    const newRows = [...tableRows]
+    newRows[rowIndex].label = value
+    setTableRows(newRows)
+  }
+
+  const handleTableRowCellChange = (rowIndex: number, cellIndex: number, value: string) => {
+    const newRows = [...tableRows]
+    newRows[rowIndex].cells[cellIndex] = value
+    setTableRows(newRows)
+  }
+
+  // Updated blank answer handler
+  const handleBlankAnswerChange = (key: string, value: string) => {
+    setBlankAnswers((prev) => ({ ...prev, [key]: value }))
   }
 
   const handleAddColumn = () => {
@@ -876,15 +1018,29 @@ export function CreateListeningQuestionModal({
         return
       }
     } else if (formData.q_type === "TABLE_COMPLETION") {
-      if (
-        columns.some((col) => !col.trim()) ||
-        rows.some((row) => !row.label.trim() || row.cells.some((cell) => cell === null || cell === undefined))
-      ) {
-        setError("Barcha jadval maydonlarini to'ldiring")
+      // Updated validation for table completion
+      if (tableColumns.length < 2) {
+        setError("Jadvalda kamida bitta ustun va bitta burchak belgisi bo'lishi kerak")
+        return
+      }
+      if (tableColumns.slice(1).some((col) => !col.trim())) {
+        setError("Barcha ustun nomlarini to'ldiring")
+        return
+      }
+      if (tableRows.some((row) => !row.label.trim())) {
+        setError("Barcha qator nomlarini to'ldiring")
+        return
+      }
+      if (detectedBlanks.length > 0 && Object.keys(blankAnswers).length !== detectedBlanks.length) {
+        setError("Barcha aniqlangan bo'sh joylar uchun javob kiriting")
+        return
+      }
+      if (detectedBlanks.length > 0 && Object.values(blankAnswers).some((ans) => !ans.trim())) {
+        setError("Barcha javoblarni to'ldiring")
         return
       }
     } else if (formData.q_type === "MAP_LABELING") {
-      if (!photoFile && !editingQuestion && !copyingQuestion) {
+      if (!photoFile && !editingQuestion && !copyingQuestion && !imagePreview) {
         setError("MAP_LABELING turi uchun rasm majburiy")
         return
       }
@@ -977,18 +1133,26 @@ export function CreateListeningQuestionModal({
           await api.lQuestions.create(questionData)
         }
       } else if (formData.q_type === "TABLE_COMPLETION") {
-        questionData.columns = columns
-        questionData.rows = rows
-        questionData.choices = choices
-        questionData.answers = tableAnswers
+        // Transform rows from { label, cells } to [label, ...cells] format
+        const transformedRows = tableRows.map((row) => [row.label, ...row.cells])
+
+        questionData.columns = tableColumns
+        questionData.rows = transformedRows
+        questionData.answers = blankAnswers
+
+        console.log("[v0] TABLE_COMPLETION data:", JSON.stringify(questionData, null, 2))
 
         if (editingQuestion && !copyingQuestion) {
+          console.log("[v0] Updating TABLE_COMPLETION question:", editingQuestion.id)
           await api.lQuestions.update(editingQuestion.id.toString(), questionData)
         } else {
+          console.log("[v0] Creating new TABLE_COMPLETION question")
           await api.lQuestions.create(questionData)
         }
+
+        console.log("[v0] TABLE_COMPLETION submission successful")
       } else if (formData.q_type === "MAP_LABELING") {
-        if (!photoFile && !editingQuestion && !copyingQuestion) {
+        if (!photoFile && !editingQuestion && !copyingQuestion && !imagePreview) {
           setError("MAP_LABELING turi uchun rasm majburiy")
           setLoading(false)
           return
@@ -1002,6 +1166,10 @@ export function CreateListeningQuestionModal({
         }
         if (photoFile) {
           formDataWithFile.append("photo", photoFile)
+        } else if (imagePreview && !editingQuestion && !copyingQuestion) {
+          // If editing and no new photo, keep existing one, handled by API implicitly if not sent
+          // If creating, and imagePreview exists, implies photoFile should have been set
+          // This case might need refinement based on how existing images are handled in updates
         }
 
         // Removed mapType2 submission logic
@@ -1064,15 +1232,23 @@ export function CreateListeningQuestionModal({
 
       onQuestionCreated()
 
+      // Reset all states to default values after successful submission
       setFormData({
         q_type: "MCQ_SINGLE",
         q_text: "",
       })
       setOptions([{ key: "A", text: "" }])
       setCorrectAnswers([])
+      // Resetting unused states
       setColumns([""])
       setRows([{ label: "", cells: [""] }])
       setChoices({})
+      // Resetting TABLE_COMPLETION states
+      setTableColumns(["", ""]) // Reset to initial state with corner
+      setTableRows([{ label: "", cells: [""] }]) // Reset to initial state
+      setDetectedBlanks([]) // Clear detected blanks
+      setBlankAnswers({}) // Clear blank answers
+
       setMatchingChoices({ A: "" })
       setMatchingRows([""])
       setMatchingAnswers({})
@@ -1098,7 +1274,6 @@ export function CreateListeningQuestionModal({
       setSummaryDragChoices({ "1": "" })
       setSummaryDragOptions([""])
       setSummaryDragAnswers({})
-      setTableAnswers({})
     } catch (error: any) {
       console.error("Failed to save listening question:", error)
       if (error.response?.data?.message) {
@@ -1568,184 +1743,138 @@ export function CreateListeningQuestionModal({
 
           {isTableCompletion && (
             <div className="space-y-4">
-              {/* Columns */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Jadval Ustunlari *</Label>
-                  <Button
-                    type="button"
-                    onClick={handleAddColumn}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Ustun
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {columns.map((column, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <span className="text-slate-400 text-xs w-12">#{index + 1}:</span>
-                      <Input
-                        value={column}
-                        onChange={(e) => handleColumnChange(index, e.target.value)}
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder={`Ustun ${index + 1}`}
-                        required
-                      />
-                      {columns.length > 1 && (
-                        <Button
-                          type="button"
-                          onClick={() => handleRemoveColumn(index)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Rows */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300 text-sm">Jadval Qatorlari *</Label>
-                  <Button
-                    type="button"
-                    onClick={handleAddRow}
-                    variant="outline"
-                    size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Qator
-                  </Button>
-                </div>
-                <div className="space-y-3">
-                  {rows.map((row, rowIndex) => (
-                    <div key={rowIndex} className="border border-slate-600 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-sm w-16">Qator {rowIndex + 1}:</span>
-                        <Input
-                          value={row.label}
-                          onChange={(e) => handleRowLabelChange(rowIndex, e.target.value)}
-                          className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                          placeholder="Qator nomi (masalan: Preferred climate)"
-                          required
-                        />
-                        {rows.length > 1 && (
-                          <Button
-                            type="button"
-                            onClick={() => handleRemoveRow(rowIndex)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-400 hover:text-red-300"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}>
-                        {row.cells.map((cell, cellIndex) => (
-                          <div key={cellIndex} className="space-y-1">
-                            <Label className="text-xs text-slate-400">
-                              {columns[cellIndex] || `Ustun ${cellIndex + 1}`}
-                            </Label>
-                            <Input
-                              value={cell}
-                              onChange={(e) => handleRowCellChange(rowIndex, cellIndex, e.target.value)}
-                              className="bg-slate-700/50 border-slate-600 text-white"
-                              placeholder={`Bo'sh joy uchun "" qoldiring`}
-                            />
-                            <div className="text-xs text-slate-500">
-                              Bo'sh joy: {rowIndex}_{cellIndex}
+              {/* Table Preview */}
+              <div className="border border-slate-600 rounded-lg p-4 bg-slate-700/20">
+                <Label className="text-slate-300 text-sm mb-2 block">Jadval Ko'rinishi</Label>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-600 p-2 bg-slate-700/50">
+                          <Input
+                            value={tableColumns[0] || ""}
+                            onChange={(e) => handleTableColumnChange(0, e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white text-sm"
+                            placeholder="Burchak (0,0)"
+                          />
+                        </th>
+                        {tableColumns.slice(1).map((col, index) => (
+                          <th key={index} className="border border-slate-600 p-2 bg-slate-700/50">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={col}
+                                onChange={(e) => handleTableColumnChange(index + 1, e.target.value)}
+                                className="bg-slate-700/50 border-slate-600 text-white text-sm"
+                                placeholder={`Ustun ${index + 1}`}
+                              />
+                              {tableColumns.length > 2 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => handleTableRemoveColumn(index + 1)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-400 hover:text-red-300 p-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              )}
                             </div>
-                          </div>
+                          </th>
                         ))}
-                      </div>
-                    </div>
-                  ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableRows.map((row, rowIndex) => (
+                        <tr key={rowIndex}>
+                          <td className="border border-slate-600 p-2 bg-slate-700/30">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={row.label}
+                                onChange={(e) => handleTableRowLabelChange(rowIndex, e.target.value)}
+                                className="bg-slate-700/50 border-slate-600 text-white text-sm"
+                                placeholder={`Qator ${rowIndex + 1}`}
+                              />
+                              {tableRows.length > 1 && (
+                                <Button
+                                  type="button"
+                                  onClick={() => handleTableRemoveRow(rowIndex)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-400 hover:text-red-300 p-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                          {row.cells.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="border border-slate-600 p-2">
+                              <Input
+                                value={cell}
+                                onChange={(e) => handleTableRowCellChange(rowIndex, cellIndex, e.target.value)}
+                                className="bg-slate-700/50 border-slate-600 text-white text-sm"
+                                placeholder="Matn yoki ___"
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-
-              {/* Choices */}
-              <div className="space-y-2">
-                <Label className="text-slate-300 text-sm">Tanlov Variantlari (bo'sh joylar uchun)</Label>
-                <div className="text-xs text-slate-400 mb-2">
-                  Format: qator_ustun (masalan: 0_2 - 1-qator, 3-ustun uchun). Bo'sh joylar uchun tanlov variantlarini
-                  kiriting.
-                </div>
-                <div className="space-y-2">
-                  {Object.entries(choices).map(([key, value]) => (
-                    <div key={key} className="flex items-center gap-2">
-                      <Select value={key} disabled>
-                        <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white w-24">
-                          <SelectValue placeholder="0_0" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-700 border-slate-600">
-                          {Array.from({ length: rows.length }, (_, rowIdx) =>
-                            Array.from({ length: columns.length }, (_, colIdx) => `${rowIdx}_${colIdx}`),
-                          )
-                            .flat()
-                            .map((option) => (
-                              <SelectItem key={option} value={option}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <span className="text-slate-400">:</span>
-                      <Input
-                        value={value}
-                        onChange={(e) => handleChoiceChange(key, e.target.value)}
-                        className="bg-slate-700/50 border-slate-600 text-white flex-1"
-                        placeholder="Tanlov varianti (masalan: warm)"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          const newChoices = { ...choices }
-                          delete newChoices[key]
-                          setChoices(newChoices)
-                          const newAnswers = { ...tableAnswers }
-                          delete newAnswers[key]
-                          setTableAnswers(newAnswers)
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                <div className="flex gap-2 mt-3">
                   <Button
                     type="button"
-                    onClick={() => {
-                      const existingKeys = Object.keys(choices)
-                      let newKey = "0_0"
-                      let counter = 0
-                      while (existingKeys.includes(newKey)) {
-                        const row = Math.floor(counter / columns.length)
-                        const col = counter % columns.length
-                        newKey = `${row}_${col}`
-                        counter++
-                      }
-                      setChoices((prev) => ({ ...prev, [newKey]: "" }))
-                    }}
+                    onClick={handleTableAddColumn}
                     variant="outline"
                     size="sm"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent text-xs"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
                   >
                     <Plus className="w-3 h-3 mr-1" />
-                    Tanlov Qo'shish
+                    Ustun Qo'shish
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleTableAddRow}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Qator Qo'shish
                   </Button>
                 </div>
               </div>
+
+              {/* Detected Blanks and Answers */}
+              {detectedBlanks.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-slate-300 text-sm">Aniqlangan Bo'sh Joylar ({detectedBlanks.length} ta)</Label>
+                  <p className="text-xs text-slate-400 mb-2">
+                    Jadvalda ___ bilan belgilangan bo'sh joylar uchun to'g'ri javoblarni kiriting
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {detectedBlanks.map((blank) => (
+                      <div key={blank.key} className="flex items-center gap-2 p-2 bg-slate-700/20 rounded">
+                        <span className="text-slate-400 text-xs font-mono w-20">{blank.key}:</span>
+                        <span className="text-slate-300 text-xs flex-1">{blank.position}</span>
+                        <Input
+                          value={blankAnswers[blank.key] || ""}
+                          onChange={(e) => handleBlankAnswerChange(blank.key, e.target.value)}
+                          className="bg-slate-700/50 border-slate-600 text-white w-48"
+                          placeholder="To'g'ri javob"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detectedBlanks.length === 0 && (
+                <div className="text-center py-4 text-slate-400 text-sm">
+                  Bo'sh joylar topilmadi. Jadvalda ___ (3 ta yoki undan ko'p chiziqcha) bilan bo'sh joylarni belgilang.
+                </div>
+              )}
             </div>
           )}
 
