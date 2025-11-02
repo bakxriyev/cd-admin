@@ -1,5 +1,7 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
+
 import { useState, useEffect } from "react"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,9 +58,32 @@ export default function ResultsPage() {
   const [userRole, setUserRole] = useState<string>("")
   const [currentUserLocation, setCurrentUserLocation] = useState<string>("")
 
-  const handleViewDetail = (result: ExamResultWithDetails) => {
+  const [detailedAnswers, setDetailedAnswers] = useState<any>(null)
+  const [answersLoading, setAnswersLoading] = useState(false)
+  const [detailedAnswersModalOpen, setDetailedAnswersModalOpen] = useState(false)
+  const [selectedResultForAnswers, setSelectedResultForAnswers] = useState<ExamResultWithDetails | null>(null)
+
+  const handleViewDetail = async (result: ExamResultWithDetails) => {
     setSelectedResult(result)
     setDetailModalOpen(true)
+  }
+
+  const handleViewAnswers = async (result: ExamResultWithDetails) => {
+    setSelectedResultForAnswers(result)
+    setAnswersLoading(true)
+
+    try {
+      const answers = await api.results.getAnswers(result.user_id, result.exam_id)
+      console.log("[v0] Fetched answers:", answers)
+      setDetailedAnswers(answers)
+    } catch (error) {
+      console.error("[v0] Failed to fetch answers:", error)
+      setDetailedAnswers(null)
+    } finally {
+      setAnswersLoading(false)
+    }
+
+    setDetailedAnswersModalOpen(true)
   }
 
   useEffect(() => {
@@ -273,6 +298,76 @@ export default function ResultsPage() {
       .map((n) => n[0])
       .join("")
       .toUpperCase()
+  }
+
+  const getCorrectAnswer = (item: any): { text: string; key?: string } => {
+    // First, get the user's question key
+    let userQuestionKey: string | null = null
+    if (item.user_answer && typeof item.user_answer === "object" && item.user_answer !== null) {
+      const keys = Object.keys(item.user_answer)
+      if (keys.length > 0) {
+        userQuestionKey = keys[0]
+      }
+    }
+
+    // Try correct_answer first only if it's not empty
+    if (item.correct_answer && Array.isArray(item.correct_answer) && item.correct_answer.length > 0) {
+      return { text: item.correct_answer[0] }
+    }
+
+    if (item.correct_answer && typeof item.correct_answer === "object" && !Array.isArray(item.correct_answer)) {
+      // If we have a user question key, use it to get the answer
+      if (userQuestionKey && userQuestionKey in item.correct_answer) {
+        return { text: String(item.correct_answer[userQuestionKey]), key: userQuestionKey }
+      }
+      // Otherwise get first value
+      const values = Object.values(item.correct_answer)
+      if (values.length > 0) {
+        const [key, value] = Object.entries(item.correct_answer)[0]
+        return { text: String(value), key }
+      }
+    }
+
+    // Fall back to answers field if correct_answer is empty or doesn't exist
+    if (item.answers) {
+      if (Array.isArray(item.answers)) {
+        if (item.answers.length > 0) {
+          return { text: item.answers[0] }
+        }
+      }
+      if (typeof item.answers === "object" && item.answers !== null) {
+        if (userQuestionKey && userQuestionKey in item.answers) {
+          return { text: String(item.answers[userQuestionKey]), key: userQuestionKey }
+        }
+        // Otherwise get first value
+        const values = Object.values(item.answers)
+        if (values.length > 0) {
+          const [key, value] = Object.entries(item.answers)[0]
+          return { text: String(value), key }
+        }
+      }
+      if (typeof item.answers === "string") {
+        return { text: item.answers }
+      }
+    }
+
+    return { text: "N/A" }
+  }
+
+  const getUserAnswer = (item: any): { text: string; key?: string } => {
+    if (!item.user_answer) {
+      return { text: "" }
+    }
+
+    if (typeof item.user_answer === "object" && item.user_answer !== null) {
+      const entries = Object.entries(item.user_answer)
+      if (entries.length > 0) {
+        const [key, value] = entries[0]
+        return { text: String(value), key }
+      }
+    }
+
+    return { text: String(item.user_answer) }
   }
 
   if (loading) {
@@ -590,14 +685,25 @@ export default function ResultsPage() {
                           {new Date(result.taken_at).toLocaleDateString("uz-UZ")}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-slate-400 hover:text-white"
-                            onClick={() => handleViewDetail(result)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-slate-400 hover:text-white"
+                              onClick={() => handleViewDetail(result)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-slate-400 hover:text-white"
+                              onClick={() => handleViewAnswers(result)}
+                              title="Javoblarni Ko'rish"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -609,91 +715,251 @@ export default function ResultsPage() {
         </Card>
 
         <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
-          <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-white">
+          <DialogContent className="max-w-4xl bg-slate-800 border-slate-700 text-white max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold">Batafsil Natija - {selectedResult?.user_id}</DialogTitle>
+              <DialogTitle className="text-xl font-bold">Natija - {selectedResult?.user_id}</DialogTitle>
             </DialogHeader>
 
             {selectedResult && (
               <div className="space-y-6">
                 <Card className="bg-slate-700/50 border-slate-600">
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold text-white mb-3">Foydalanuvchi Ma'lumotlari</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-4 gap-4">
                       <div>
-                        <p className="text-slate-400">Ism:</p>
-                        <p className="text-white font-medium">{selectedResult.user?.name || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Email:</p>
-                        <p className="text-white font-medium">{selectedResult.user?.email || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Username:</p>
-                        <p className="text-white font-medium">{selectedResult.user?.username || "N/A"}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Sana:</p>
-                        <p className="text-white font-medium">
-                          {new Date(selectedResult.taken_at).toLocaleDateString("uz-UZ")}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-slate-700/50 border-slate-600">
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold text-white mb-4">Batafsil Natijalar</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-slate-600/50 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-2">Listening</p>
-                        <p className="text-3xl font-bold text-blue-400">
+                        <p className="text-slate-400 text-sm">Listening</p>
+                        <p className="text-2xl font-bold text-blue-400">
                           {selectedResult.listening_band_score?.toFixed(1) || "0.0"}
                         </p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {selectedResult.listening_correct_answers}/{selectedResult.listening_total_questions} to'g'ri
-                        </p>
                       </div>
-
-                      <div className="p-4 bg-slate-600/50 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-2">Reading</p>
-                        <p className="text-3xl font-bold text-emerald-400">
+                      <div>
+                        <p className="text-slate-400 text-sm">Reading</p>
+                        <p className="text-2xl font-bold text-blue-400">
                           {selectedResult.reading_band_score?.toFixed(1) || "0.0"}
                         </p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          {selectedResult.reading_correct_answers}/{selectedResult.reading_total_questions} to'g'ri
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm">Writing</p>
+                        <p className="text-2xl font-bold text-blue-400">
+                          {selectedResult.writing_band_score?.toFixed(1) || "N/A"}
                         </p>
                       </div>
-
-                      <div className="p-4 bg-slate-600/50 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-2">Writing</p>
-                        <p className="text-3xl font-bold text-purple-400">
-                          {selectedResult.writing_band_score?.toFixed(1) || "Baholanmagan"}
+                      <div>
+                        <p className="text-slate-400 text-sm">Overall</p>
+                        <p className="text-2xl font-bold text-emerald-400">
+                          {selectedResult.overall_band_score?.toFixed(1) || "N/A"}
                         </p>
-                        <div className="flex gap-4 mt-2 text-xs text-slate-400">
-                          <span>Part 1: {selectedResult.writing_part1_score?.toFixed(1) || "N/A"}</span>
-                          <span>Part 2: {selectedResult.writing_part2_score?.toFixed(1) || "N/A"}</span>
-                        </div>
                       </div>
-
-                      <div className="p-4 bg-slate-600/50 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-2">Speaking</p>
-                        <p className="text-3xl font-bold text-yellow-400">
-                          {selectedResult.speaking_score?.toFixed(1) || "Baholanmagan"}
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">Band Score</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 text-center p-6 bg-gradient-to-r from-emerald-600/20 to-blue-600/20 rounded-lg border border-emerald-500/30">
-                      <p className="text-slate-400 text-sm mb-2">Overall Band Score</p>
-                      <p className="text-5xl font-bold text-emerald-400">
-                        {selectedResult.overall_band_score?.toFixed(1) || "Baholanmagan"}
-                      </p>
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={detailedAnswersModalOpen} onOpenChange={setDetailedAnswersModalOpen}>
+          <DialogContent className="max-w-6xl bg-slate-800 border-slate-700 text-white max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">
+                Javob Tahlili - {selectedResultForAnswers?.user_id}
+              </DialogTitle>
+            </DialogHeader>
+
+            {selectedResultForAnswers && (
+              <div className="space-y-6">
+                <Card className="bg-slate-700/50 border-slate-600">
+                  <CardContent className="p-4">
+                    {detailedAnswers ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-slate-400 text-sm">Jami Natija</p>
+                          <p className="text-3xl font-bold text-emerald-400">
+                            {(detailedAnswers.listening?.filter((q: any) => q.is_correct).length || 0) +
+                              (detailedAnswers.reading?.filter((q: any) => q.is_correct).length || 0) +
+                              " / 40"}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-slate-400 text-sm">Overall Band</p>
+                          <p className="text-3xl font-bold text-emerald-400">
+                            {selectedResultForAnswers.overall_band_score?.toFixed(1) || "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-slate-400">Ma'lumotlar yuklanmoqda...</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {answersLoading ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400">Javoblar yuklanmoqda...</p>
+                  </div>
+                ) : detailedAnswers ? (
+                  <div className="space-y-6">
+                    {detailedAnswers.listening && detailedAnswers.listening.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-4">
+                          Listening (Savollar 1-{detailedAnswers.listening.length})
+                        </h3>
+                        <Card className="bg-slate-700/30 border-slate-600">
+                          <CardContent className="p-0">
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="border-slate-600">
+                                    <TableHead className="text-slate-300 w-16">Savol</TableHead>
+                                    <TableHead className="text-slate-300">Sizning Javob</TableHead>
+                                    <TableHead className="text-slate-300">To'g'ri Javob</TableHead>
+                                    <TableHead className="text-slate-300 w-32">Natija</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {detailedAnswers.listening.map((item: any, idx: number) => {
+                                    const userAnswerData = getUserAnswer(item)
+                                    const correctAnswerData = getCorrectAnswer(item)
+                                    const isCorrect = item.is_correct
+                                    const questionNum = idx + 1
+
+                                    return (
+                                      <TableRow
+                                        key={`listening_${idx}`}
+                                        className="border-slate-600 hover:bg-slate-600/30"
+                                      >
+                                        <TableCell className="text-white font-bold">{questionNum}</TableCell>
+                                        <TableCell className="text-slate-300">
+                                          {userAnswerData.text ? (
+                                            <span className="bg-blue-500/20 px-2 py-1 rounded text-blue-300 text-sm">
+                                              {userAnswerData.text}
+                                              {userAnswerData.key && (
+                                                <sub className="ml-1 text-xs opacity-70">{userAnswerData.key}</sub>
+                                              )}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-400 italic">Not Answered</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-slate-300">
+                                          <div className="text-sm">
+                                            <p className="font-medium">
+                                              {correctAnswerData.text}
+                                              {correctAnswerData.key && (
+                                                <sub className="ml-1 text-xs opacity-70">{correctAnswerData.key}</sub>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          {!userAnswerData.text ? (
+                                            <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs">
+                                              Not Answered
+                                            </Badge>
+                                          ) : isCorrect ? (
+                                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                                              ✓ Correct
+                                            </Badge>
+                                          ) : (
+                                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                              ✕ Incorrect
+                                            </Badge>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+
+                    {detailedAnswers.reading && detailedAnswers.reading.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-bold text-white mb-4">
+                          Reading (Savollar {(detailedAnswers.listening?.length || 0) + 1}-
+                          {(detailedAnswers.listening?.length || 0) + detailedAnswers.reading.length})
+                        </h3>
+                        <Card className="bg-slate-700/30 border-slate-600">
+                          <CardContent className="p-0">
+                            <div className="overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="border-slate-600">
+                                    <TableHead className="text-slate-300 w-16">Savol</TableHead>
+                                    <TableHead className="text-slate-300">Sizning Javob</TableHead>
+                                    <TableHead className="text-slate-300">To'g'ri Javob</TableHead>
+                                    <TableHead className="text-slate-300 w-32">Natija</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {detailedAnswers.reading.map((item: any, idx: number) => {
+                                    const userAnswerData = getUserAnswer(item)
+                                    const correctAnswerData = getCorrectAnswer(item)
+                                    const isCorrect = item.is_correct
+                                    const questionNum = (detailedAnswers.listening?.length || 0) + idx + 1
+
+                                    return (
+                                      <TableRow
+                                        key={`reading_${idx}`}
+                                        className="border-slate-600 hover:bg-slate-600/30"
+                                      >
+                                        <TableCell className="text-white font-bold">{questionNum}</TableCell>
+                                        <TableCell className="text-slate-300">
+                                          {userAnswerData.text ? (
+                                            <span className="bg-blue-500/20 px-2 py-1 rounded text-blue-300 text-sm">
+                                              {userAnswerData.text}
+                                              {userAnswerData.key && (
+                                                <sub className="ml-1 text-xs opacity-70">{userAnswerData.key}</sub>
+                                              )}
+                                            </span>
+                                          ) : (
+                                            <span className="text-gray-400 italic">Not Answered</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-slate-300">
+                                          <div className="text-sm">
+                                            <p className="font-medium">
+                                              {correctAnswerData.text}
+                                              {correctAnswerData.key && (
+                                                <sub className="ml-1 text-xs opacity-70">{correctAnswerData.key}</sub>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                          {!userAnswerData.text ? (
+                                            <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/30 text-xs">
+                                              Not Answered
+                                            </Badge>
+                                          ) : isCorrect ? (
+                                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                                              ✓ Correct
+                                            </Badge>
+                                          ) : (
+                                            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                              ✕ Incorrect
+                                            </Badge>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-red-400">Javoblarni yuklashda xatolik yuz berdi</p>
+                  </div>
+                )}
               </div>
             )}
           </DialogContent>

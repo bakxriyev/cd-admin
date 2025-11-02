@@ -376,6 +376,7 @@ export const api = {
       apiRequest("/results/calculate-all", {
         method: "POST",
       }),
+    getAnswers: (userId: string, examId: string) => apiRequest(`/results/answers/${userId}/${examId}`),
     create: (resultData: any) =>
       apiRequest("/results", {
         method: "POST",
@@ -391,6 +392,7 @@ export const api = {
         method: "DELETE",
       }),
   },
+
 
   // Reading
   reading: {
