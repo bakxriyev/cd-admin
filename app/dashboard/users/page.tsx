@@ -7,19 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Search,
-  Filter,
-  Users,
-  UserCheck,
-  UserX,
-  Calendar,
-  Trash2,
-  Wallet,
-  DollarSign,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react"
+import { Search, Filter, Users, UserCheck, UserX, Calendar, Trash2, Wallet, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, type User, secureStorage, USER_DATA_KEY } from "@/lib/api"
 import { UserModal } from "@/components/user-modal"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -40,6 +28,8 @@ export default function UsersPage() {
   const [locationFilter, setLocationFilter] = useState<string>("REI")
   const [availableLocations, setAvailableLocations] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [examDateFrom, setExamDateFrom] = useState<string>("")
+  const [examDateTo, setExamDateTo] = useState<string>("")
 
   const fetchFreshClientData = async () => {
     const userData = secureStorage.getItem(USER_DATA_KEY)
@@ -152,9 +142,33 @@ export default function UsersPage() {
       )
     }
 
+    if (examDateFrom || examDateTo) {
+      filtered = filtered.filter((user) => {
+        if (!user.results || user.results.length === 0) return false
+        
+        const examDates = user.results
+          .map((result: any) => result.taken_at)
+          .filter(Boolean)
+        
+        return examDates.some((examDate: string) => {
+          const dateStr = new Date(examDate).toISOString().split('T')[0]
+          
+          if (examDateFrom && dateStr < examDateFrom) return false
+          if (examDateTo) {
+            const endDate = new Date(examDateTo)
+            endDate.setDate(endDate.getDate() + 1)
+            const endDateStr = endDate.toISOString().split('T')[0]
+            if (dateStr >= endDateStr) return false
+          }
+          
+          return true
+        })
+      })
+    }
+
     setFilteredUsers(filtered)
     setCurrentPage(1)
-  }, [users, searchTerm, statusFilter, locationFilter, userType, userLocation])
+  }, [users, searchTerm, statusFilter, locationFilter, userType, userLocation, examDateFrom, examDateTo])
 
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
@@ -323,39 +337,74 @@ export default function UsersPage() {
 
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="ID, ism, email yoki username bo'yicha qidirish..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
-                  />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder="ID, ism, email yoki username bo'yicha qidirish..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-slate-700/50 border border-slate-600 text-white placeholder:text-slate-400"
+                    />
+                  </div>
                 </div>
+
+                {(userType === "admin" || userType === "superadmin") && (
+                  <div className="w-full sm:w-48">
+                    <Select value={locationFilter} onValueChange={setLocationFilter}>
+                      <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white">
+                        <Filter className="w-4 h-4 mr-2" />
+                        <SelectValue placeholder="Location" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="all" className="text-white hover:bg-slate-700">
+                          Barcha Locationlar
+                        </SelectItem>
+                        {availableLocations.map((location) => (
+                          <SelectItem key={location} value={location} className="text-white hover:bg-slate-700">
+                            {location}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
 
-              {(userType === "admin" || userType === "superadmin") && (
-                <div className="w-full sm:w-48">
-                  <Select value={locationFilter} onValueChange={setLocationFilter}>
-                    <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white">
-                      <Filter className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="Location" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      <SelectItem value="all" className="text-white hover:bg-slate-700">
-                        Barcha Locationlar
-                      </SelectItem>
-                      {availableLocations.map((location) => (
-                        <SelectItem key={location} value={location} className="text-white hover:bg-slate-700">
-                          {location}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="flex flex-col sm:flex-row gap-4 items-end border-t border-slate-700 pt-4">
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 block mb-2">Imtihon topshirgan sana (Dan)</label>
+                  <input
+                    type="date"
+                    value={examDateFrom}
+                    onChange={(e) => setExamDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              )}
+                <div className="flex-1">
+                  <label className="text-xs text-slate-400 block mb-2">Imtihon topshirgan sana (Gacha)</label>
+                  <input
+                    type="date"
+                    value={examDateTo}
+                    onChange={(e) => setExamDateTo(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {(examDateFrom || examDateTo) && (
+                  <Button
+                    onClick={() => {
+                      setExamDateFrom("")
+                      setExamDateTo("")
+                    }}
+                    className="bg-slate-700 hover:bg-slate-600 text-white"
+                    size="sm"
+                  >
+                    Filtrlash tozalash
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -384,53 +433,65 @@ export default function UsersPage() {
                     <TableHead className="text-slate-300">Password</TableHead>
                     <TableHead className="text-slate-300">Location</TableHead>
                     <TableHead className="text-slate-300">Ro'yxatdan O'tgan</TableHead>
+                    <TableHead className="text-slate-300">Imtihon Sanasi</TableHead>
                     <TableHead className="text-slate-300">Amallar</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedUsers.map((user) => (
-                    <TableRow key={user.id} className="border-slate-700 hover:bg-slate-700/30">
-                      <TableCell className="text-blue-400 font-mono text-sm font-semibold">{user.id}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src="/placeholder.svg" />
-                            <AvatarFallback className="bg-slate-700 text-slate-300 text-xs">
-                              {getInitials(user.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-white font-medium">{user.name}</p>
+                  {paginatedUsers.map((user) => {
+                    const latestExamDate = user.results && user.results.length > 0
+                      ? new Date(
+                          Math.max(...user.results.map((r: any) => new Date(r.taken_at).getTime()))
+                        ).toLocaleDateString("uz-UZ")
+                      : "Imtihon yo'q"
+                    
+                    return (
+                      <TableRow key={user.id} className="border-slate-700 hover:bg-slate-700/30">
+                        <TableCell className="text-blue-400 font-mono text-sm font-semibold">{user.id}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-8 h-8">
+                              <AvatarImage src="/placeholder.svg" />
+                              <AvatarFallback className="bg-slate-700 text-slate-300 text-xs">
+                                {getInitials(user.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-white font-medium">{user.name}</p>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-slate-300">{user.email}</TableCell>
-                      <TableCell className="text-slate-300">{user.username}</TableCell>
-                      <TableCell className="text-slate-300 font-mono text-sm">{user.password || "••••••••"}</TableCell>
-                      <TableCell className="text-slate-300">
-                        <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">
-                          {user.location || "N/A"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-slate-300">
-                        {new Date(user.created_at).toLocaleDateString("uz-UZ")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <UserModal mode="view" user={user} />
-                          <UserModal mode="edit" user={user} onSuccess={refreshUsers} />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-400 hover:text-red-300"
-                            onClick={() => handleDeleteUser(user.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-slate-300">{user.email}</TableCell>
+                        <TableCell className="text-slate-300">{user.username}</TableCell>
+                        <TableCell className="text-slate-300 font-mono text-sm">{user.password || "••••••••"}</TableCell>
+                        <TableCell className="text-slate-300">
+                          <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs font-medium">
+                            {user.location || "N/A"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {new Date(user.created_at).toLocaleDateString("uz-UZ")}
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {latestExamDate}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <UserModal mode="view" user={user} />
+                            <UserModal mode="edit" user={user} onSuccess={refreshUsers} />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:text-red-300"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

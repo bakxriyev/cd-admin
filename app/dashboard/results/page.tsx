@@ -10,25 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import {
-  Search,
-  Eye,
-  Download,
-  FileText,
-  Trophy,
-  Clock,
-  Target,
-  CalendarIcon,
-  Calculator,
-  Filter,
-  RefreshCw,
-  FileSpreadsheet,
-} from "lucide-react"
+import { Search, Eye, Download, FileText, Trophy, Clock, Target, Calculator, Filter, RefreshCw, FileSpreadsheet } from 'lucide-react'
 import { api, type Result, type Exam, secureStorage, USER_DATA_KEY, USER_TYPE_KEY } from "@/lib/api"
 import { format } from "date-fns"
-import { cn } from "@/lib/utils"
 
 interface ExamResultWithDetails extends Result {
   exam?: {
@@ -62,6 +46,7 @@ export default function ResultsPage() {
   const [answersLoading, setAnswersLoading] = useState(false)
   const [detailedAnswersModalOpen, setDetailedAnswersModalOpen] = useState(false)
   const [selectedResultForAnswers, setSelectedResultForAnswers] = useState<ExamResultWithDetails | null>(null)
+  const [dateFilterLoading, setDateFilterLoading] = useState(false)
 
   const handleViewDetail = async (result: ExamResultWithDetails) => {
     setSelectedResult(result)
@@ -146,6 +131,8 @@ export default function ResultsPage() {
     }
   }
 
+  // Removed the API call, using client-side filtering only
+
   useEffect(() => {
     let filtered = results
 
@@ -171,12 +158,31 @@ export default function ResultsPage() {
       filtered = filtered.filter((result) => result.exam_id === examFilter)
     }
 
-    if (dateFrom) {
-      filtered = filtered.filter((result) => new Date(result.taken_at) >= dateFrom)
-    }
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter((result) => {
+        // Extract date string in YYYY-MM-DD format from taken_at
+        let resultDateString: string
+        if (typeof result.taken_at === "string") {
+          // If it's ISO string like "2025-11-11T19:23:45Z", extract just the date part
+          resultDateString = result.taken_at.split("T")[0]
+        } else {
+          // If it's a Date object, convert to local date string
+          const date = new Date(result.taken_at)
+          resultDateString = date.toISOString().split("T")[0]
+        }
 
-    if (dateTo) {
-      filtered = filtered.filter((result) => new Date(result.taken_at) <= dateTo)
+        const fromDateString = dateFrom ? format(dateFrom, "yyyy-MM-dd") : null
+        const toDateString = dateTo ? format(dateTo, "yyyy-MM-dd") : null
+
+        if (fromDateString && toDateString) {
+          return resultDateString >= fromDateString && resultDateString <= toDateString
+        } else if (fromDateString) {
+          return resultDateString >= fromDateString
+        } else if (toDateString) {
+          return resultDateString <= toDateString
+        }
+        return true
+      })
     }
 
     setFilteredResults(filtered)
@@ -563,53 +569,41 @@ export default function ResultsPage() {
               </Select>
 
               <div className="flex gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "justify-start text-left font-normal bg-slate-700/50 border-slate-600 text-white hover:bg-slate-600",
-                        !dateFrom && "text-slate-400",
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "Dan"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 bg-slate-800 border-slate-700">
-                    <Calendar
-                      mode="single"
-                      selected={dateFrom}
-                      onSelect={setDateFrom}
-                      initialFocus
-                      className="text-white"
-                    />
-                  </PopoverContent>
-                </Popover>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateFrom ? format(dateFrom, "yyyy-MM-dd") : ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const date = new Date(e.target.value)
+                        date.setHours(0, 0, 0, 0)
+                        setDateFrom(date)
+                      } else {
+                        setDateFrom(undefined)
+                      }
+                    }}
+                    className="px-3 py-2 bg-slate-700/50 border border-slate-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "justify-start text-left font-normal bg-slate-700/50 border-slate-600 text-white hover:bg-slate-600",
-                        !dateTo && "text-slate-400",
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateTo ? format(dateTo, "dd/MM/yyyy") : "Gacha"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 bg-slate-800 border-slate-700">
-                    <Calendar
-                      mode="single"
-                      selected={dateTo}
-                      onSelect={setDateTo}
-                      initialFocus
-                      className="text-white"
-                    />
-                  </PopoverContent>
-                </Popover>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateTo ? format(dateTo, "yyyy-MM-dd") : ""}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const date = new Date(e.target.value)
+                        date.setHours(0, 0, 0, 0)
+                        setDateTo(date)
+                      } else {
+                        setDateTo(undefined)
+                      }
+                    }}
+                    className="px-3 py-2 bg-slate-700/50 border border-slate-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Removed dateFilterLoading state usage */}
               </div>
             </div>
 

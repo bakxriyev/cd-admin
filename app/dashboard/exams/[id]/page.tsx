@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter } from 'next/navigation'
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, type Exam, type Reading, type Listening, type Writing, secureStorage, USER_TYPE_KEY } from "@/lib/api"
-import { BookOpen, Headphones, PenTool, Plus, ArrowLeft, Clock, Key, FileText, Eye, Trash2, Edit } from "lucide-react"
+import { BookOpen, Headphones, PenTool, Plus, ArrowLeft, Clock, Key, FileText, Eye, Trash2, Edit } from 'lucide-react'
 import { CreateSkillModal } from "@/components/create-skill-modal"
 import { DeleteExamModal } from "@/components/delete-exam-modal"
 import { EditExamModal } from "../../../../components/edit-exam"
@@ -40,6 +40,12 @@ export default function ExamSkillsPage() {
     console.log("[v0] User type loaded:", type)
     setUserType(type || "")
     setUserTypeLoading(false)
+
+    if (type === "client") {
+      console.log("[v0] Client detected, redirecting to exams page")
+      router.push("/dashboard/exams")
+      return
+    }
 
     if (examId && examId !== "undefined") {
       console.log("[v0] Fetching exam with ID:", examId)
@@ -118,6 +124,11 @@ export default function ExamSkillsPage() {
   const canDelete = !userTypeLoading && (userType === "superadmin" || userType === "admin")
   console.log("[v0] Can edit:", canEdit, "Can delete:", canDelete, "User type:", userType, "Loading:", userTypeLoading)
 
+  if (!userTypeLoading && userType === "client") {
+    router.push("/dashboard/exams")
+    return null
+  }
+
   if (loading || userTypeLoading) {
     return (
       <DashboardLayout>
@@ -172,11 +183,13 @@ export default function ExamSkillsPage() {
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-white text-balance">{exam.title}</h1>
-              <p className="text-slate-400">{canEdit ? "Ko'nikmalarni boshqarish" : "Ko'nikmalarni ko'rish"}</p>
+              <p className="text-slate-400">
+                {canEdit ? "Ko'nikmalarni boshqarish" : "Ko'nikmalarni ko'rish"}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {canEdit && (
+          {canEdit && (
+            <div className="flex items-center gap-2">
               <Button
                 onClick={() => setShowEditExamModal(true)}
                 variant="outline"
@@ -185,18 +198,18 @@ export default function ExamSkillsPage() {
                 <Edit className="w-4 h-4 mr-2" />
                 Tahrirlash
               </Button>
-            )}
-            {canDelete && (
-              <Button
-                onClick={() => setShowDeleteExamModal(true)}
-                variant="outline"
-                className="border-red-600 text-red-400 hover:bg-red-700/20"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                O'chirish
-              </Button>
-            )}
-          </div>
+              {canDelete && (
+                <Button
+                  onClick={() => setShowDeleteExamModal(true)}
+                  variant="outline"
+                  className="border-red-600 text-red-400 hover:bg-red-700/20"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  O'chirish
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Exam Info */}
@@ -216,13 +229,15 @@ export default function ExamSkillsPage() {
                   {exam.duration} daqiqa
                 </p>
               </div>
-              <div>
-                <p className="text-slate-400 text-sm">Parol</p>
-                <p className="text-white flex items-center gap-2 font-medium">
-                  <Key className="w-4 h-4" />
-                  {exam.password}
-                </p>
-              </div>
+              {canEdit && (
+                <div>
+                  <p className="text-slate-400 text-sm">Parol</p>
+                  <p className="text-white flex items-center gap-2 font-medium">
+                    <Key className="w-4 h-4" />
+                    {exam.password}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-slate-400 text-sm">Yaratilgan</p>
                 <p className="text-white font-medium">{new Date(exam.created_at).toLocaleDateString("uz-UZ")}</p>
@@ -258,14 +273,16 @@ export default function ExamSkillsPage() {
                       <>
                         {existingReadings.map((reading) => (
                           <div key={reading.id} className="space-y-2">
-                            <Button
-                              onClick={() => handleSkillClick("reading", reading.id)}
-                              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
-                              size="sm"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              <span className="truncate">{reading.passage_title || reading.title}</span>
-                            </Button>
+                            {canEdit && (
+                              <Button
+                                onClick={() => handleSkillClick("reading", reading.id)}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
+                                size="sm"
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                <span className="truncate">{reading.passage_title || reading.title}</span>
+                              </Button>
+                            )}
                             {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("reading", reading.id)}
@@ -292,9 +309,7 @@ export default function ExamSkillsPage() {
                             Yaratish
                           </Button>
                         )}
-                        {!canEdit && (
-                          <p className="text-slate-400 text-center text-sm italic">Reading bo'limi mavjud emas</p>
-                        )}
+                        <p className="text-slate-400 text-center text-sm italic">Reading bo'limi mavjud emas</p>
                       </>
                     )}
                   </div>
@@ -317,14 +332,16 @@ export default function ExamSkillsPage() {
                       <>
                         {existingListenings.map((listening) => (
                           <div key={listening.id} className="space-y-2">
-                            <Button
-                              onClick={() => handleSkillClick("listening", listening.id)}
-                              className="w-full bg-green-600 hover:bg-green-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
-                              size="sm"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              <span className="truncate">{listening.title}</span>
-                            </Button>
+                            {canEdit && (
+                              <Button
+                                onClick={() => handleSkillClick("listening", listening.id)}
+                                className="w-full bg-green-600 hover:bg-green-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
+                                size="sm"
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                <span className="truncate">{listening.title}</span>
+                              </Button>
+                            )}
                             {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("listening", listening.id)}
@@ -351,9 +368,7 @@ export default function ExamSkillsPage() {
                             Yaratish
                           </Button>
                         )}
-                        {!canEdit && (
-                          <p className="text-slate-400 text-center text-sm italic">Listening bo'limi mavjud emas</p>
-                        )}
+                        <p className="text-slate-400 text-center text-sm italic">Listening bo'limi mavjud emas</p>
                       </>
                     )}
                   </div>
@@ -376,14 +391,16 @@ export default function ExamSkillsPage() {
                       <div className="space-y-3 mb-4">
                         {existingWritings.map((writing) => (
                           <div key={writing.id} className="space-y-2">
-                            <Button
-                              onClick={() => handleSkillClick("writing", writing.id)}
-                              className="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
-                              size="sm"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              <span className="truncate">{writing.part}</span>
-                            </Button>
+                            {canEdit && (
+                              <Button
+                                onClick={() => handleSkillClick("writing", writing.id)}
+                                className="w-full bg-purple-600 hover:bg-purple-700 text-white text-sm py-3 rounded-lg transition-colors font-medium"
+                                size="sm"
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                <span className="truncate">{writing.part}</span>
+                              </Button>
+                            )}
                             {canEdit && (
                               <Button
                                 onClick={() => handleDeleteSkill("writing", writing.id)}
@@ -399,7 +416,6 @@ export default function ExamSkillsPage() {
                         ))}
                       </div>
                     )}
-
                     {canEdit && (
                       <>
                         {!hasWritingPart1 && (
@@ -422,14 +438,9 @@ export default function ExamSkillsPage() {
                             PART 2 Yaratish
                           </Button>
                         )}
-                        {hasWritingPart1 && hasWritingPart2 && existingWritings.length === 0 && (
-                          <p className="text-slate-400 text-center text-xs italic">
-                            Barcha writing qismlari qo'shilgan
-                          </p>
-                        )}
                       </>
                     )}
-                    {!canEdit && existingWritings.length === 0 && (
+                    {existingWritings.length === 0 && (
                       <p className="text-slate-400 text-center text-sm italic">Writing bo'limi mavjud emas</p>
                     )}
                   </div>

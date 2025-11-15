@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from 'next/navigation'
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, Filter, Plus, Eye, Calendar, Users, Clock, FileText } from "lucide-react"
+import { Search, Filter, Plus, Eye, Calendar, Users, Clock, FileText } from 'lucide-react'
 import { api, type Exam, secureStorage, USER_TYPE_KEY } from "@/lib/api"
 import { CreateExamModal } from "@/components/create-exam-modal"
 
@@ -267,14 +267,16 @@ export default function ExamsPage() {
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-slate-400 hover:text-white"
-                            onClick={() => handleExamClick(exam)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                          {userType !== "client" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-slate-400 hover:text-white"
+                              onClick={() => handleExamClick(exam)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
